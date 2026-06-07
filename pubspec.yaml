@@ -1,0 +1,83 @@
+name: fort_al_kalim
+description: Fort Al-Kalim - Arabic-English vocabulary battle game
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Game Engine
+  flame: ^1.18.0
+  flame_audio: ^2.10.0
+
+  # Firebase Suite
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  firebase_database: ^11.1.4
+  firebase_storage: ^12.3.2
+  firebase_messaging: ^15.1.3
+
+  # Google Auth + Play Games
+  google_sign_in: ^6.2.1
+  games_services: ^4.0.1
+
+  # Local Storage
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+
+  # Audio & Speech
+  just_audio: ^0.9.40
+  speech_to_text: ^7.0.0
+
+  # Networking & Images
+  cached_network_image: ^3.4.1
+  http: ^1.2.2
+
+  # State Management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Navigation
+  go_router: ^14.2.7
+
+  # UI / Utils
+  google_fonts: ^6.2.1
+  lottie: ^3.1.2
+  shimmer: ^3.0.0
+  shared_preferences: ^2.3.2
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.11
+  riverpod_generator: ^2.4.3
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/audio/
+    - assets/fonts/
+    - assets/lottie/
+
+  fonts:
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/Outfit-Regular.ttf
+        - asset: assets/fonts/Outfit-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Outfit-SemiBold.ttf
+          weight: 600
+    - family: Amiri
+      fonts:
+        - asset: assets/fonts/Amiri-Regular.ttf
+        - asset: assets/fonts/Amiri-Bold.ttf
+          weight: 700

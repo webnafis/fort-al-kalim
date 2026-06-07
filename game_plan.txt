@@ -1,0 +1,533 @@
+=========================================
+  FORT AL-KALIM — GAME PLAN NOTES
+=========================================
+Last Updated: 2026-06-08
+Status: Planning / Discussion Phase — Q1-Q18 + Social Features RESOLVED
+
+=========================================
+0. THE STORY — FORT AL-KALIM (قلعة الكليم)
+=========================================
+
+  THE LEGEND OF FORT AL-KALIM
+
+  Long ago, in an age when scholars were the mightiest warriors and
+  ink was worth more than blood, there existed an ancient fortress
+  unlike anything the world had ever seen.
+
+  Fort Al-Kalim — قلعة الكليم — The Fortress of the Word.
+
+  It was not built with stone or iron. Its walls were raised from
+  thousand-year-old manuscripts, its towers carved from scrolls of
+  Arabic poetry, and its gates sealed shut by the sacred weight of
+  language itself. No sword could breach it. No army could conquer it.
+  Only one force in the world had the power to bring those walls down —
+
+  A word, spoken correctly.
+
+  The fortress stood between two great kingdoms: one that spoke in
+  Arabic, and one that reached across the world to understand it.
+  For centuries, neither kingdom could cross to the other side.
+  The walls held firm — not from strength, but from ignorance.
+
+  The ancient Keepers of Al-Kalim declared a sacred law:
+
+    "Weapons of steel shall not open these gates.
+     Only the warrior who masters our words
+     shall ever break our walls.
+     For a word understood is a fortress fallen.
+     A word forgotten is a wall rebuilt."
+
+  And so the War of Words began.
+
+  Champions entered the arena from both sides — armed not with arrows,
+  but with vocabulary. Not with shields, but with memory. They hurled
+  missiles of meaning at each other's forts: each correct translation
+  a direct hit, each mastered word a crack in the enemy wall.
+
+  The warrior who stops learning watches their fort crumble.
+  The warrior who masters every word... watches the gates of Al-Kalim
+  swing open before them.
+
+  Generation after generation, the duel continues.
+  New champions rise. New levels are unlocked. New words are learned.
+  And with every word mastered, the fortress yields a little more.
+
+  Today, you step into the arena.
+  Your fort stands at 200. Your enemy is ready.
+  Your words are your only weapons.
+
+  Will you break their walls before they break yours?
+
+  — Welcome to Fort Al-Kalim. —
+
+=========================================
+1. GAME OVERVIEW
+=========================================
+  Game Name     : Fort Al-Kalim (قلعة الكليم)
+  Tagline       : "Words are your only weapons."
+  Genre         : Real-Time PvP + AI Duel / Educational Game
+  Core Theme    : Arabic-English vocabulary mastery through battle
+  Platform      : Android (initial target, Flutter enables future iOS)
+  Multiplayer   : Online PvP (algorithmic), Friend Direct Match, AI fallback
+  Social Layer  : Google Play Games Services (GPGS) — cross-device, friends,
+                  achievements, leaderboards, social graph
+  Visual Theme  : Two forts (Red vs Blue), missiles/bombs as attack weapons
+                  Fort and weapon art upgrades with each level
+  Score System  : Total damage dealt across ALL games, ALL levels (lifetime)
+  Leaderboard   : In-app (Global + Level-specific) + GPGS native leaderboards
+
+=========================================
+2. USER ACCOUNT & PROGRESSION SYSTEM
+=========================================
+  - New user creates an account (Google Play or email)
+  - Every user starts at Level 1
+  - Each level has 100 Arabic-English word pairs
+  - FORT STRENGTH: Fixed at 200 HP for ALL levels (no HP scaling)
+  - Fort visual design updates per level (aesthetic upgrade only)
+  - Weapon/missile design updates per level (aesthetic upgrade only)
+
+  LEVEL-UP RULE:
+    - Player levels up when ALL words in ALL 4 sections reach 0 AP
+    - UI and framing: focused on WINS (looks like a war game)
+    - Behind the scenes: mastery drives progression, not win count
+    - Win/loss record tracked and displayed but does NOT affect level-up
+
+  SCORE:
+    - Lifetime score = total cumulative damage dealt in all games ever
+    - Every successful attack adds its damage value to lifetime score
+    - Failed attacks add 0
+
+=========================================
+3. MATCHMAKING SYSTEM
+=========================================
+
+  WHAT IS "TOTAL REMAINING AP"?
+    - Sum of ALL current attack power values across all 100 words,
+      all 4 sections, in a player's current level
+    - HIGH = hasn't learned much yet (newer/weaker)
+    - LOW = close to mastering the level (experienced)
+    - Used ONLY as a tiebreaker within the same level
+
+  MATCHMAKING RULES (in order):
+
+    RULE 1 — SAME LEVEL FIRST (highest priority):
+      If 2+ players of the SAME level are in the queue:
+        → Match them together, ALWAYS, no matter their AP difference
+        → Among multiple same-level candidates: pick pair with SMALLEST
+          total AP difference (most balanced skill within that level)
+        → Further tie: pick whoever has been waiting longest
+
+    RULE 2 — CROSS-LEVEL MATCH (only if alone at their level):
+      If a player is the ONLY one at their level in the queue:
+        → Compare with players from NEAREST levels (L-1 and L+1 first,
+          then L-2 / L+2, etc.)
+        → Among cross-level candidates: pick the pair with SMALLEST
+          total AP difference (closest skill level)
+        → Further tie: pick whoever has waited longest
+
+    RULE 3 — 15-SECOND HARD CAP:
+      If a player has waited 15 seconds AND queue size >= 2:
+        → Immediately match with best available (smallest AP diff)
+        → Level gap is ignored at this point
+      If waited 15 seconds AND queue size < 2 (alone):
+        → Offer AI opponent fallback
+
+  AI OPPONENT:
+    - Mimics a player with similar total remaining AP
+    - AI difficulty calibrated to human's skill
+    - Available instantly as fallback option at any time
+
+=========================================
+4. FAIRNESS IN CROSS-LEVEL MATCHES
+=========================================
+  - Fort HP fixed at 200 for all levels → no HP imbalance ever
+  - Different word pools per level → NOT a fairness problem:
+      * Each player's words selected from THEIR OWN level's pool
+      * Word selection is independent per player
+      * Both players always start with equivalent attack potential (200)
+  - AP difference check applied cross-level to ensure skill balance
+
+=========================================
+5. WORD SELECTION ALGORITHM (Per Game)
+=========================================
+  MASTERY TRACKING:
+    - Each word has 4 independent AP values (one per section)
+    - High AP = not mastered yet → selected first for games
+    - 0 AP = fully mastered → used as bonus words only
+
+  WORD SELECTION (per player, per game):
+    STEP 1: Per section, rank player's 100 words by current AP (high first)
+    STEP 2: Select words to fill each section's damage quota
+    STEP 3: AIM for equal word count across all 4 sections
+    STEP 4: Each player's word list built independently (P1 ≠ P2)
+    STEP 5: Same word CAN appear in multiple sections (tracked separately)
+
+  ATTACK POWER BALANCE FORMULA:
+    Fort HP = 200. Player's total attack potential must also = 200.
+    Try for equal words per section. Multipliers: See=1.0, Listen=1.25,
+    Write=1.5, Speak=1.75. Sum of multipliers = 5.5.
+
+    Let N = words per section, B = base damage per word:
+      B × N × 5.5 = 200 → B = 200 / (N × 5.5)
+
+    For N=10 (default, 40 words total):
+      B = 3.636
+      See damage:    10 × 3.636 × 1.00 = 36.36
+      Listen damage: 10 × 3.636 × 1.25 = 45.45
+      Write damage:  10 × 3.636 × 1.50 = 54.55
+      Speak damage:  10 × 3.636 × 1.75 = 63.64
+      TOTAL = 200 ✓
+
+    Per-hit damage breakdown (one word used once):
+      Hit 1: B × M × 1.00  (full)
+      Hit 2: B × M × 0.75  (75%)
+      Hit 3: B × M × 0.50  (50%)
+      Hit 4: B × M × 0.25  (25%)
+      Word exhausted after 4 hits.
+
+    Unequal distribution: if a section has fewer words available,
+    B is auto-adjusted so total across all sections still = 200.
+
+  OVERFLOW RULE (not enough high-AP words):
+    - If player's unmastered words sum < 200, add bonus mastered words
+    - Bonus words reset to full B power as level-completion reward
+    - Bonus words LOCKED until all real unfinished words hit 0 AP
+
+=========================================
+6. PRE-GAME: READING PHASE
+=========================================
+  - Before combat: players enter optional reading phase
+  - Can review all assigned words:
+      English text, Arabic text, spelling, audio, speaking practice
+  - Fully optional — can skip entirely
+  - No time limit
+  - Player who finishes first can start attacking IMMEDIATELY
+  - Other player can still be reading — NOT blocked
+  - No return to reading once combat phase begins
+
+=========================================
+7. THE 4 ATTACK SECTIONS (Bombs/Missiles)
+=========================================
+  Section       | Multiplier | Style
+  --------------|------------|---------------------------
+  See (Image)   | 1.0x       | Visual recognition
+  Listen (Audio)| 1.25x      | Auditory recognition
+  Write (Tiles) | 1.5x       | Construction / arrangement
+  Speak (Voice) | 1.75x      | Active production / recall
+
+  ATTACK DEGRADATION (all sections):
+    - Successful hit: damage = current AP × M; AP decreases by B×0.25
+    - Failed attempt: 0 damage; word LOCKED for 30 seconds
+    - Words sorted: highest current AP first (most powerful at top)
+    - No time limit per attack attempt (rush comes from the live duel)
+
+  SECTION 1 — LISTEN:
+    Shown   : Arabic audio plays + 4 English text options (1 correct)
+    Action  : Tap the correct English meaning
+    Success : Missile fires, damage dealt, AP degrades
+    Fail    : No missile, word locked 30s
+
+  SECTION 2 — SEE:
+    Shown   : Image of the Arabic word + 4 Arabic text options (1 correct)
+    Action  : Tap the correct Arabic word
+    Images  : Concrete nouns → real photo/illustration
+              Abstract words → symbolic icon or visual metaphor
+    Success : Missile fires, damage dealt, AP degrades
+    Fail    : No missile, word locked 30s
+
+  SECTION 3 — SPEAK:
+    Shown   : English word on screen + microphone activated
+    Action  : Speak the Arabic translation aloud
+    Validate: Arabic speech recognition checks pronunciation
+    Success : Missile fires, damage dealt, AP degrades
+    Fail    : No missile, word locked 30s
+    Disabled: If speech recognition unavailable → visible but greyed out
+              Notice: "Voice section unavailable on this device"
+
+  SECTION 4 — WRITE:
+    Shown   : English translation + Arabic word as rearrangeable tiles
+    Tiles   : Short words → individual Arabic letters
+              Longer words → small chunk tiles (syllable groups)
+              Rule: tiles concatenated in correct order = exact Arabic word
+                    (including harakat, diacritics, all symbols)
+              No extra/distractor tiles — only the correct tiles shown
+    Action  : Drag/tap tiles into correct order
+    Success : Missile fires, damage dealt, AP degrades
+    Fail    : No missile, word locked 30s
+
+=========================================
+8. WORD DATABASE DESIGN
+=========================================
+  SOURCE:
+    - User provides JSON files (100 words per level)
+    - Imported into Firebase Firestore + cached locally
+
+  WORD RECORD:
+    * arabic_text     : string (full Arabic with harakat)
+    * english_text    : string
+    * audio_url       : Firebase Storage ref (Arabic pronunciation)
+    * image_url       : Firebase Storage ref (for SEE section)
+    * write_tiles     : string[] (chunks, concat = exact arabic_text)
+
+  PER-USER PER-WORD-PER-SECTION (Firestore + local SQLite):
+    * current_ap_see / listen / write / speak : float
+    * lock_until_see / listen / write / speak  : timestamp | null
+    * is_bonus_word                             : bool
+
+  STORAGE:
+    - Word content → Firebase Storage + local cache
+    - User progress → Firestore + local SQLite (offline sync)
+    - Live game state → Firebase Realtime Database
+    - Leaderboard → Firestore
+
+=========================================
+9. TECHNICAL STACK (FINALIZED)
+=========================================
+  Framework        : Flutter (Dart)
+  Game Layer       : Flame Engine (2D, built on Flutter)
+  Authentication   : Firebase Auth + Google Play Games Sign-In (both FREE)
+  Realtime DB      : Firebase Realtime Database (live sessions + friend rooms)
+  App DB           : Firebase Firestore (users, words, progress, scores, social)
+  File Storage     : Firebase Storage (audio, images)
+  Local Cache      : sqflite (SQLite) — offline word data & progress
+  Audio            : flame_audio / just_audio
+  Speech           : speech_to_text (Flutter package)
+  Images           : cached_network_image (Flutter package)
+  Social / GPGS    : games_services (Flutter package for GPGS SDK)
+  Push Notifs      : Firebase Cloud Messaging (FCM) — for friend game invites
+
+  AUTHENTICATION DETAIL — FREE OPTIONS:
+    A. Firebase Auth + Google Sign-In (PRIMARY):
+       - Completely FREE on Firebase Spark (free) plan
+       - Users tap "Continue with Google" → Google account auth
+       - Handles session persistence, token refresh, secure auth
+       - Stores user profile in Firestore
+
+    B. Google Play Games Services (GPGS) Sign-In (LINKED LAYER):
+       - Also FREE — configured via Google Play Developer Console
+       - Links GPGS player ID to Firebase UID for cross-device identity
+       - Gives players Play Games gamer tag and avatar automatically
+       - Enables all GPGS features (achievements, social, saved games)
+       - Flutter package: `games_services`
+
+    RECOMMENDED FLOW:
+      1. User signs in with Google (Firebase Auth)
+      2. App silently links to GPGS account in background
+      3. Player gets both Firebase UID and GPGS Player ID
+      4. Cross-device progress synced via both Firebase + GPGS Saved Games
+    Both are 100% free.
+
+=========================================
+10. LEADERBOARD & SCORING
+=========================================
+  SCORE = total cumulative damage dealt across all games, all levels
+  Earned per successful attack (adds hit damage to lifetime score)
+
+  IN-APP LEADERBOARD TYPES:
+    A. GLOBAL BOARD     — all players, sorted by lifetime score
+    B. LEVEL BOARD      — per level, sorted by damage dealt in that level
+                          (players appear on boards for levels they played)
+
+  Display: Rank | Username | Level | Score | W/L record
+  Own rank always visible even if outside top N
+
+  GPGS LEADERBOARD (native Android):
+    - Lifetime score also submitted to Google Play Games leaderboard
+    - Players can view the Play Games leaderboard from within the game
+    - GPGS leaderboard supports: All-time, Weekly, Daily tabs natively
+    - Synced automatically whenever score updates
+
+=========================================
+11. GOOGLE PLAY GAMES SERVICES (GPGS) — SOCIAL & PLATFORM FEATURES
+=========================================
+  All features below are 100% FREE via GPGS + Flutter `games_services` package.
+
+  A. CROSS-DEVICE CONTINUITY (Saved Games API):
+     - Player progress (AP values, level, score, win/loss) saved to
+       Google Drive via GPGS Saved Games API
+     - When a player signs in on a new phone, tablet, or PC (Android/ChromeOS):
+       → App detects the saved game on their GPGS account
+       → Downloads and restores their progress automatically
+     - Backup strategy: Firebase Firestore = primary (real-time sync)
+                        GPGS Saved Games = secondary (platform-level backup)
+     - Conflict resolution: whichever save has the HIGHER score wins
+
+  B. ACHIEVEMENTS:
+     - Defined in Google Play Developer Console (free to set up)
+     - Unlocked in-game by calling GPGS achievements API
+     - Displayed in Google Play Games app + in-app achievements screen
+
+     PLANNED ACHIEVEMENTS FOR FORT AL-KALIM:
+       🏅 "First Blood"        — Win your very first duel
+       🏅 "Word Warrior"       — Deal 1000 total damage across all games
+       🏅 "The Silent Scholar" — Win a game without using the SPEAK section
+       🏅 "Unstoppable"        — Win 5 games in a row
+       🏅 "Siege Master"       — Destroy an opponent's fort with WRITE bombs only
+       🏅 "Level Up!"          — Complete Level 1 (all words mastered)
+       🏅 "Polyglot"           — Complete 3 levels
+       🏅 "The Keeper"         — Reach top 10 on global leaderboard
+       🏅 "Speed Reader"       — Skip reading phase and still win a duel
+       🏅 "The Legend"         — Deal 10,000 total damage (lifetime)
+     (More achievements can be added as game grows)
+
+  C. SOCIAL GRAPH & FRIENDS:
+     - Players can connect their GPGS Friends list to Fort Al-Kalim
+     - "Friends" tab in-game shows:
+         * Friend's username and avatar (from GPGS)
+         * Friend's current level
+         * Friend's lifetime score
+         * Friend's recent game activity ("Won a duel 2h ago")
+         * Compare your score vs theirs side by side
+     - GPGS handles friend requests, acceptances, and the social list
+     - No custom friend database needed — GPGS manages it for free
+     - Players can also invite friends from their GPGS social graph
+       directly to a game (see Section 12 — Direct Friend Match)
+
+  D. PLAYER PROFILE (GPGS Identity):
+     - Consistent gamer profile across all Android devices and ChromeOS
+     - Gamer tag (display name), avatar, and Play Games level shown
+     - Profile visible to other Fort Al-Kalim players
+     - Play Games app shows Fort Al-Kalim in the player's game library
+     - Friends can see when you are playing Fort Al-Kalim (activity feed)
+
+=========================================
+12. DIRECT FRIEND MATCH (Play With Friends)
+=========================================
+  PURPOSE:
+    Two specific players want to duel each other directly,
+    bypassing the algorithmic matchmaking queue entirely.
+
+  TWO WAYS TO START A FRIEND MATCH:
+
+  WAY 1 — ROOM CODE (Quick Invite):
+    HOW IT WORKS:
+      1. Player A taps "Play with Friend" → "Create Room"
+      2. App generates a unique 6-character ROOM CODE (e.g. "KL-7842")
+         and displays it on screen
+      3. Player A shares the code with friend via any messaging app
+         (WhatsApp, SMS, copy-paste — whatever they prefer)
+      4. Player B opens Fort Al-Kalim → "Play with Friend" → "Enter Code"
+      5. Player B types the code → instantly connected to Player A's room
+      6. Both see each other's name and level → tap "Ready" → game starts
+
+    TECHNICAL IMPLEMENTATION:
+      - Room created as a node in Firebase Realtime Database:
+          rooms / {code} / { hostId, guestId, status, level, timestamp }
+      - Code expires after 5 minutes if no one joins
+      - Once both players ready → word selection runs → reading phase starts
+      - Works cross-level (two friends at different levels can play)
+
+  WAY 2 — FRIEND INVITE (From Social Graph):
+    HOW IT WORKS:
+      1. Player A opens "Friends" tab → sees their GPGS friends list
+      2. Taps on a friend → taps "Challenge to Duel"
+      3. Friend receives a PUSH NOTIFICATION:
+         "[PlayerA] has challenged you to a duel in Fort Al-Kalim! Accept?"
+      4. Friend taps "Accept" in notification → opens game → drops into
+         a private room with Player A
+      5. Both see each other → tap "Ready" → game starts
+
+    TECHNICAL IMPLEMENTATION:
+      - Invite notification sent via Firebase Cloud Messaging (FCM) — FREE
+      - Invite stored in Firestore: invites/{recipientId}/{inviteId}
+      - Recipient's app listens for new invites in real time
+      - Invite expires after 2 minutes if not accepted
+      - Accepted invite creates the same Room structure as Way 1
+
+  FRIEND MATCH RULES:
+    - Word selection and AP balance formula: same as algorithmic match
+    - No 15-second timeout — friends wait for each other willingly
+    - Cross-level play allowed (friends at different levels can duel)
+    - Fort HP = 200 for both players as always
+    - Room Code mode: host can also cancel the room at any time
+
+=========================================
+13. OPEN QUESTIONS — ALL RESOLVED ✅
+=========================================
+  Q1:  Fort HP = 200 ALL levels ✅
+  Q2:  Level-up = full word mastery (all AP → 0) ✅
+  Q3:  Same-level first; AP gap tiebreaker; 15s hard cap ✅
+  Q4:  Fort fixed + independent word pools = fair ✅
+  Q5:  Mastery = current AP per word per section ✅
+  Q6:  Multipliers: See=1.0, Listen=1.25, Write=1.5, Speak=1.75 ✅
+  Q7:  Speak disabled gracefully if unavailable ✅
+  Q8:  Real images for concrete nouns, icons for abstract ✅
+  Q9:  Small chunk tiles; concat = exact Arabic word ✅
+  Q10: Firebase (free) + local SQLite cache ✅
+  Q11: Flutter + Flame Engine ✅
+  Q12: User JSON → Firebase + local DB ✅
+  Q13: Equal-words formula designed; auto-adjusts if unequal ✅
+  Q14: Global + level-specific leaderboards ✅
+  Q15: Game name = Fort Al-Kalim (قلعة الكليم) ✅
+  Q16: Same-level always match first; AP diff = tiebreaker within level;
+        cross-level only if alone; smallest AP diff for cross-level ✅
+  Q17: No distractor tiles in WRITE section — exact tiles only ✅
+  Q18: No timer per attack — live duel pressure is the urgency ✅
+  Q19: GPGS cross-device sync (Saved Games API) ✅
+  Q20: GPGS Achievements (10 planned, more later) ✅
+  Q21: GPGS Social Graph (friends list, activity feed, comparisons) ✅
+  Q22: Direct Friend Match via Room Code (6-char) OR Friend Invite (FCM) ✅
+
+  *** ALL PLANNING QUESTIONS RESOLVED — READY TO BUILD ***
+
+=========================================
+14. DEVELOPMENT ROADMAP
+=========================================
+  Phase 0 — Pre-Dev ✅ COMPLETE
+    [x] Game concept, story, and name defined
+    [x] All Q1-Q22 resolved
+    [x] Tech stack finalized
+    [x] Social features & friend match designed
+
+  Phase 1 — Foundation
+    [ ] Create Flutter + Flame project
+    [ ] Firebase project setup (Auth, Firestore, Realtime DB, Storage, FCM)
+    [ ] Google Play Developer Console setup (GPGS, achievements, leaderboards)
+    [ ] Firebase Auth: Google Sign-In + email/password
+    [ ] GPGS sign-in link (games_services Flutter package)
+    [ ] Firestore schema: users, words, progress, scores, sessions,
+                          invites, rooms, friends_activity
+    [ ] Import word JSON into Firebase
+    [ ] Local SQLite cache layer (sqflite)
+    [ ] GPGS Saved Games: save/restore progress on new device
+
+  Phase 2 — Core Systems
+    [ ] User profile screen (level, score, win/loss, GPGS avatar)
+    [ ] Matchmaking engine (same-level priority, AP tiebreak, 15s cap)
+    [ ] Direct Friend Match: Room Code system (Firebase Realtime DB)
+    [ ] Direct Friend Match: Friend Invite via FCM push notification
+    [ ] AI opponent fallback logic
+    [ ] Word selection + AP balance formula
+    [ ] Lock timer system (30s post-failure)
+
+  Phase 3 — Gameplay (Flame Engine)
+    [ ] Fort rendering: Red fort vs Blue fort, HP bars
+    [ ] Reading phase screen (all words with audio/image)
+    [ ] Combat screen: 4 section tabs with word lists
+    [ ] LISTEN: audio playback + 4-option tap quiz
+    [ ] SEE: image display + 4 Arabic text options
+    [ ] WRITE: draggable tile arrangement (exact tiles only)
+    [ ] SPEAK: microphone + speech recognition + graceful disable
+    [ ] Missile launch + fort impact animation
+    [ ] Word lock animation (30s cooldown visual)
+    [ ] Victory / defeat screen + GPGS achievement unlock triggers
+
+  Phase 4 — Social, Progression & Polish
+    [ ] Level-up detection + cinematic transition screen
+    [ ] Fort & weapon visual upgrades per level (art assets)
+    [ ] In-app leaderboard: Global + level-specific
+    [ ] GPGS leaderboard sync (native Play Games leaderboard)
+    [ ] Friends tab: GPGS friends list + activity + score comparison
+    [ ] Achievements screen (in-app + GPGS native view)
+    [ ] Lifetime score + profile screen
+    [ ] Sound effects + background Arabic-themed music
+    [ ] Onboarding: show game story to new players
+    [ ] Game story screen (for new players)
+
+  Phase 5 — Testing & Launch
+    [ ] AI opponent balancing
+    [ ] Cross-device save/restore testing
+    [ ] Offline mode testing
+    [ ] Multiplayer + friend invite stress testing
+    [ ] Beta test with real players
+    [ ] Google Play Store submission
