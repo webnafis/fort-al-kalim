@@ -11,7 +11,7 @@ class GameWord {
   final List<String> tiles;
   final String? emoji;
   final String? audioUrl;
-  final double currentAp;
+  final int usageCount;
   final double baseDamage;
 
   GameWord({
@@ -21,7 +21,7 @@ class GameWord {
     required this.tiles,
     this.emoji,
     this.audioUrl,
-    required this.currentAp,
+    required this.usageCount,
     required this.baseDamage,
   });
 }
@@ -29,8 +29,9 @@ class GameWord {
 class WordSelectionService {
   final _firestore = FirebaseFirestore.instance;
 
-  /// Fetches unmastered words for a specific level and computes the math.
-  Future<Map<String, List<GameWord>>> selectWordsForGame(String uid, int level) async {
+  /// Fetches lowest used words for both players and combines them.
+  Future<Map<String, List<GameWord>>> selectWordsForGame(
+      String player1Uid, String player2Uid, int level) async {
     // 1. Fetch the 100 level words
     final wordsSnapshot = await _firestore
         .collection('levels')
@@ -38,31 +39,34 @@ class WordSelectionService {
         .collection('words')
         .get();
 
-    // 2. Fetch the user's progress for this level
-    // In a real app, this would be stored in users/{uid}/progress/{level}
-    // For this simulation, we'll assign default AP if progress doesn't exist.
-    final progressSnapshot = await _firestore
+    // 2. Fetch progress for both players
+    final p1ProgressSnapshot = await _firestore
         .collection('users')
-        .doc(uid)
+        .doc(player1Uid)
         .collection('progress')
         .doc('level_$level')
         .get();
 
-    Map<String, dynamic> userProgress = {};
-    if (progressSnapshot.exists) {
-      userProgress = progressSnapshot.data() ?? {};
+    Map<String, dynamic> p1Progress =
+        p1ProgressSnapshot.exists ? (p1ProgressSnapshot.data() ?? {}) : {};
+
+    Map<String, dynamic> p2Progress = {};
+    if (player2Uid != 'AI_BOT') {
+      final p2ProgressSnapshot = await _firestore
+          .collection('users')
+          .doc(player2Uid)
+          .collection('progress')
+          .doc('level_$level')
+          .get();
+      p2Progress = p2ProgressSnapshot.exists ? (p2ProgressSnapshot.data() ?? {}) : {};
     }
 
     List<Map<String, dynamic>> allWords = [];
     for (var doc in wordsSnapshot.docs) {
       final d = doc.data();
       final wordId = doc.id;
-      // Default to 1.0 AP if not started
-      final apSee = (userProgress['${wordId}_see'] ?? 1.0).toDouble();
-      final apListen = (userProgress['${wordId}_listen'] ?? 1.0).toDouble();
-      final apWrite = (userProgress['${wordId}_write'] ?? 1.0).toDouble();
-      final apSpeak = (userProgress['${wordId}_speak'] ?? 1.0).toDouble();
 
+      // Usage starts at 0. Max 4.
       allWords.add({
         'id': wordId,
         'english_text': d['english_text'] ?? '',
@@ -70,32 +74,69 @@ class WordSelectionService {
         'write_tiles': List<String>.from(d['write_tiles'] ?? []),
         'emoji': d['emoji'],
         'audio_url': d['audio_url'],
-        'apSee': apSee,
-        'apListen': apListen,
-        'apWrite': apWrite,
-        'apSpeak': apSpeak,
+        'p1_see': p1Progress['${wordId}_see_usage'] ?? 0,
+        'p1_listen': p1Progress['${wordId}_listen_usage'] ?? 0,
+        'p1_write': p1Progress['${wordId}_write_usage'] ?? 0,
+        'p1_speak': p1Progress['${wordId}_speak_usage'] ?? 0,
+        'p2_see': p2Progress['${wordId}_see_usage'] ?? 0,
+        'p2_listen': p2Progress['${wordId}_listen_usage'] ?? 0,
+        'p2_write': p2Progress['${wordId}_write_usage'] ?? 0,
+        'p2_speak': p2Progress['${wordId}_speak_usage'] ?? 0,
       });
     }
 
     if (allWords.isEmpty) return {'see': [], 'listen': [], 'write': [], 'speak': []};
 
-    // 3. Sort by highest AP (needs most practice)
-    final seePool = List.of(allWords)..sort((a, b) => b['apSee'].compareTo(a['apSee']));
-    final listenPool = List.of(allWords)..sort((a, b) => b['apListen'].compareTo(a['apListen']));
-    final writePool = List.of(allWords)..sort((a, b) => b['apWrite'].compareTo(a['apWrite']));
-    final speakPool = List.of(allWords)..sort((a, b) => b['apSpeak'].compareTo(a['apSpeak']));
-
-    // Select Top N words (Default is 10 words per section)
-    int n = min(10, allWords.length);
-
-    // 4. Calculate Base Damage (B) so that Fort HP exactly = 200
+    // Calculate Base Damage (B) so that Fort HP exactly = 200
     // Multipliers: See=1.0, Listen=1.25, Write=1.5, Speak=1.75. Sum = 5.5
-    // B * N * 5.5 = 200  =>  B = 200 / (N * 5.5)
-    double baseDamage = 200.0 / (n * 5.5);
+    // Exact 10 words per section: 10 * 5.5 = 55. 200 / 55 = 3.63
+    double baseDamage = 200.0 / (10 * 5.5);
 
-    // Helper to map
-    List<GameWord> mapToGameWord(List<Map<String, dynamic>> pool, String apKey) {
-      return pool.take(n).map((w) {
+    List<GameWord> pick10Words(String p1Key, String p2Key) {
+      // Exclude words that have reached 4 usages for BOTH players?
+      // For now, we just pick the lowest used words regardless, since if all are 4, level is mastered.
+      
+      var p1Sorted = List.of(allWords)..sort((a, b) => (a[p1Key] as int).compareTo(b[p1Key] as int));
+      var p2Sorted = List.of(allWords)..sort((a, b) => (a[p2Key] as int).compareTo(b[p2Key] as int));
+
+      List<Map<String, dynamic>> selected = [];
+      Set<String> selectedIds = {};
+
+      // Take 5 from Player 1
+      for (var w in p1Sorted) {
+        if (selected.length >= 5) break;
+        selected.add(w);
+        selectedIds.add(w['id']);
+      }
+
+      // Take 5 from Player 2, skipping duplicates
+      int p2Count = 0;
+      for (var w in p2Sorted) {
+        if (p2Count >= 5) break;
+        if (!selectedIds.contains(w['id'])) {
+          selected.add(w);
+          selectedIds.add(w['id']);
+          p2Count++;
+        }
+      }
+
+      // If we didn't get 10 words total (because of overlaps or small word pool), pad with remaining
+      if (selected.length < 10) {
+        for (var w in p1Sorted) {
+          if (selected.length >= 10) break;
+          if (!selectedIds.contains(w['id'])) {
+            selected.add(w);
+            selectedIds.add(w['id']);
+          }
+        }
+      }
+
+      // Shuffle the 10 words
+      selected.shuffle();
+
+      return selected.map((w) {
+        // We pass the highest usage count among the two players, or just average it?
+        // Since it's UI representation, we just take P1's usage since the device is P1.
         return GameWord(
           id: w['id'],
           englishText: w['english_text'],
@@ -103,17 +144,17 @@ class WordSelectionService {
           tiles: w['write_tiles'],
           emoji: w['emoji'],
           audioUrl: w['audio_url'],
-          currentAp: w[apKey],
+          usageCount: w[p1Key], 
           baseDamage: baseDamage,
         );
       }).toList();
     }
 
     return {
-      'see': mapToGameWord(seePool, 'apSee'),
-      'listen': mapToGameWord(listenPool, 'apListen'),
-      'write': mapToGameWord(writePool, 'apWrite'),
-      'speak': mapToGameWord(speakPool, 'apSpeak'),
+      'see': pick10Words('p1_see', 'p2_see'),
+      'listen': pick10Words('p1_listen', 'p2_listen'),
+      'write': pick10Words('p1_write', 'p2_write'),
+      'speak': pick10Words('p1_speak', 'p2_speak'),
     };
   }
 }

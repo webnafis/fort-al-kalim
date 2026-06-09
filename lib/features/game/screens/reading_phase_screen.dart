@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
@@ -29,8 +31,15 @@ class _ReadingPhaseScreenState extends ConsumerState<ReadingPhaseScreen> {
     final user = await ref.read(currentUserModelProvider.future);
     if (user == null) return;
     
+    // Fetch game details to know players and level
+    final gameDoc = await FirebaseFirestore.instance.collection('games').doc(widget.gameId).get();
+    final gameData = gameDoc.data() ?? {};
+    final p1 = gameData['player1'] ?? user.uid;
+    final p2 = gameData['player2'] ?? 'AI_BOT';
+    final level = gameData['level'] ?? user.currentLevel;
+
     final svc = ref.read(wordSelectionServiceProvider);
-    final words = await svc.selectWordsForGame(user.uid, user.currentLevel);
+    final words = await svc.selectWordsForGame(p1, p2, level);
     
     if (mounted) {
       setState(() {
@@ -112,8 +121,10 @@ class _ReadingPhaseScreenState extends ConsumerState<ReadingPhaseScreen> {
                   ),
                   trailing: IconButton(
                     icon: const Icon(Icons.volume_up, color: AppTheme.textSecondary),
-                    onPressed: () {
-                      // TODO: Play Audio
+                    onPressed: () async {
+                      final tts = FlutterTts();
+                      await tts.setLanguage('ar');
+                      await tts.speak(w.arabicText);
                     },
                   ),
                 ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flame_audio/flame_audio.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
@@ -29,27 +30,60 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
   }
 
   Future<void> _processResult() async {
-    // In a real app, we would query the games/{gameId} node to see who won
-    // For this prototype, we'll randomize or assume victory based on a coin flip
-    // to simulate the end of a match.
-    
     await Future.delayed(const Duration(seconds: 2)); // Simulate network check
+    
+    bool leveledUp = false;
+    double damage = 200.0; // Simulated
+    bool victory = true;   // Simulated
+
+    final user = ref.read(currentUserProvider).value;
+    if (user != null) {
+      try {
+        final gameDoc = await FirebaseFirestore.instance.collection('games').doc(widget.gameId).get();
+        final level = gameDoc.data()?['level'] ?? user.currentLevel;
+
+        if (user.currentLevel == level) {
+          final wordsSnapshot = await FirebaseFirestore.instance.collection('levels').doc('level_$level').collection('words').get();
+          final progressSnapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('progress').doc('level_$level').get();
+          
+          if (progressSnapshot.exists && wordsSnapshot.docs.isNotEmpty) {
+            final progress = progressSnapshot.data()!;
+            bool allMastered = true;
+            
+            for (var wordDoc in wordsSnapshot.docs) {
+              final id = wordDoc.id;
+              final see = progress['${id}_see_usage'] ?? 0;
+              final listen = progress['${id}_listen_usage'] ?? 0;
+              final write = progress['${id}_write_usage'] ?? 0;
+              final speak = progress['${id}_speak_usage'] ?? 0;
+              
+              if (see < 4 || listen < 4 || write < 4 || speak < 4) {
+                allMastered = false;
+                break;
+              }
+            }
+            
+            if (allMastered) leveledUp = true;
+          }
+        }
+      } catch (e) {
+        debugPrint("Error checking level up: $e");
+      }
+    }
     
     if (mounted) {
       setState(() {
-        // Just simulating a victory for the showcase
-        _isVictory = true; 
-        _damageDealt = 200.0; // We destroyed their fort!
-        // Simulate a level up 50% of the time on victory
-        _showLevelUp = Random().nextBool();
+        _isVictory = victory; 
+        _damageDealt = damage;
+        _showLevelUp = leveledUp;
         _isLoading = false;
       });
       
-      _updateLifetimeScore();
+      _updateLifetimeScore(leveledUp);
     }
   }
 
-  Future<void> _updateLifetimeScore() async {
+  Future<void> _updateLifetimeScore(bool leveledUp) async {
     final user = ref.read(currentUserProvider).value;
     if (user == null) return;
 
@@ -59,7 +93,7 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
         'lifetimeScore': FieldValue.increment(_damageDealt),
         'wins': _isVictory ? FieldValue.increment(1) : FieldValue.increment(0),
         'losses': !_isVictory ? FieldValue.increment(1) : FieldValue.increment(0),
-        if (_showLevelUp) 'currentLevel': FieldValue.increment(1),
+        if (leveledUp) 'currentLevel': FieldValue.increment(1),
       });
     } catch (e) {
       debugPrint("Failed to update score: $e");
@@ -129,18 +163,18 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
                 ),
 
               const SizedBox(height: 60),
-              ElevatedButton.icon(
+              ElevatedButton(
                 onPressed: () {
+                  FlameAudio.play('click.mp3');
                   context.go(Routes.home);
                 },
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                  backgroundColor: AppTheme.surfaceDark,
-                  foregroundColor: AppTheme.textPrimary,
-                  side: BorderSide(color: AppTheme.gold.withOpacity(0.5)),
+                  backgroundColor: AppTheme.gold,
+                  foregroundColor: AppTheme.backgroundDark,
+                  minimumSize: const Size(200, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                icon: const Icon(Icons.home),
-                label: const Text('RETURN TO CAMP', style: TextStyle(fontSize: 18, letterSpacing: 2)),
+                child: const Text('Return to Base', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
               if (_showLevelUp) ...[
                 const SizedBox(height: 40),

@@ -9,7 +9,8 @@ import '../../../data/services/auth_service.dart';
 import '../services/matchmaking_service.dart';
 
 class MatchmakingScreen extends ConsumerStatefulWidget {
-  const MatchmakingScreen({super.key});
+  final int level;
+  const MatchmakingScreen({super.key, required this.level});
 
   @override
   ConsumerState<MatchmakingScreen> createState() => _MatchmakingScreenState();
@@ -45,13 +46,12 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
 
     final service = ref.read(matchmakingServiceProvider);
     
-    // Hardcoded 200 AP for testing, in production we would calculate this
-    // from the user's unmastered words.
+    // Pass selected level, and lifetime score for rank
     final stream = service.findMatch(
       uid: user.uid,
       displayName: user.displayName,
-      level: user.currentLevel,
-      remainingAP: 200.0,
+      level: widget.level,
+      lifetimeScore: user.lifetimeScore,
     );
 
     _matchSub = stream.listen((gameId) {

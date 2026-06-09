@@ -52,7 +52,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.matchmaking,
-        builder: (context, state) => const MatchmakingScreen(),
+        builder: (context, state) {
+          final levelStr = state.uri.queryParameters['level'];
+          final level = levelStr != null ? int.tryParse(levelStr) ?? 1 : 1;
+          return MatchmakingScreen(level: level);
+        },
       ),
       GoRoute(
         path: Routes.friendRoom,

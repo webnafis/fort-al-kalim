@@ -94,9 +94,10 @@ class ListenAttackCard extends StatelessWidget {
             IconButton(
               iconSize: 48,
               icon: const Icon(Icons.play_circle_fill, color: AppTheme.gold),
-              onPressed: () {
-                // Play Audio stub
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Playing Arabic Audio...'), duration: Duration(milliseconds: 500)));
+              onPressed: () async {
+                final tts = FlutterTts();
+                await tts.setLanguage('ar');
+                await tts.speak(word.arabicText);
               },
             ),
             const SizedBox(height: 12),

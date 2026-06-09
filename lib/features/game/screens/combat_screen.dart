@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flame/game.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flame_audio/flame_audio.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
@@ -24,6 +26,7 @@ class CombatScreen extends ConsumerStatefulWidget {
 class _CombatScreenState extends ConsumerState<CombatScreen> {
   late CombatGame _game;
   bool _isLoading = true;
+  bool _isPaused = false;
   Map<String, List<GameWord>>? _words;
   Timer? _aiAttackTimer;
 
@@ -32,14 +35,31 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
     super.initState();
     _game = CombatGame();
     _loadData();
+    _startBattleMusic();
+  }
+
+  Future<void> _startBattleMusic() async {
+    try {
+      await FlameAudio.bgm.stop();
+      await FlameAudio.bgm.play('bgm_battle.mp3');
+    } catch (e) {
+      debugPrint('Error playing battle bgm: $e');
+    }
   }
 
   Future<void> _loadData() async {
     final user = await ref.read(currentUserModelProvider.future);
     if (user == null) return;
 
+    // Fetch game details to know players and level
+    final gameDoc = await FirebaseFirestore.instance.collection('games').doc(widget.gameId).get();
+    final gameData = gameDoc.data() ?? {};
+    final p1 = gameData['player1'] ?? user.uid;
+    final p2 = gameData['player2'] ?? 'AI_BOT';
+    final level = gameData['level'] ?? user.currentLevel;
+
     final svc = ref.read(wordSelectionServiceProvider);
-    final words = await svc.selectWordsForGame(user.uid, user.currentLevel);
+    final words = await svc.selectWordsForGame(p1, p2, level);
 
     if (mounted) {
       setState(() {
@@ -54,7 +74,7 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
     // Just for demo, AI fires a missile every 3-8 seconds
     final rnd = Random();
     _aiAttackTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (!mounted) return;
+      if (!mounted || _isPaused) return;
       if (rnd.nextBool()) {
         _game.fireMissileAtPlayer('read', 5.0, () {
           _checkGameOver();
@@ -73,6 +93,7 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
   void _checkGameOver() {
     if (_game.playerHp <= 0 || _game.enemyHp <= 0) {
       _aiAttackTimer?.cancel();
+      FlameAudio.bgm.stop();
       context.go('${Routes.result}?gameId=${widget.gameId}');
     }
     setState(() {}); // force HP bar rebuild
@@ -84,7 +105,25 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
       _game.fireMissileAtEnemy(section, word.baseDamage, () {
         _checkGameOver();
       });
-      // In a real app, reduce AP in Firestore here.
+      // Update usage in Firestore
+      final user = ref.read(currentUserModelProvider).value;
+      if (user != null) {
+        // Find the game level from the words map implicitly (or we could store it).
+        // For safety we'll use user.currentLevel but strictly we should use the game level.
+        // Actually, let's just fetch it from the game doc, but since it's an async operation,
+        // we can just run it in the background.
+        FirebaseFirestore.instance.collection('games').doc(widget.gameId).get().then((doc) {
+          final level = doc.data()?['level'] ?? user.currentLevel;
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .collection('progress')
+              .doc('level_$level')
+              .set({
+            '${word.id}_${section}_usage': FieldValue.increment(1),
+          }, SetOptions(merge: true));
+        });
+      }
     } else {
       // Lock the word
       ref.read(lockTimerServiceProvider).lockWord(word.id);
@@ -117,8 +156,13 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
                     top: 8, left: 8, right: 8,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildHpBar('YOU', _game.playerHp, Colors.blue),
+                        IconButton(
+                          icon: const Icon(Icons.pause, color: AppTheme.gold, size: 32),
+                          onPressed: _showPauseMenu,
+                        ),
                         _buildHpBar('ENEMY', _game.enemyHp, AppTheme.redFort),
                       ],
                     ),
@@ -160,6 +204,62 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showPauseMenu() {
+    setState(() => _isPaused = true);
+    _game.pauseEngine();
+    FlameAudio.bgm.pause();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surfaceDark,
+          title: const Text('GAME PAUSED', style: TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, textAlign: TextAlign.center)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildPauseMenuButton('Resume', Icons.play_arrow, () {
+                context.pop();
+                setState(() => _isPaused = false);
+                _game.resumeEngine();
+                FlameAudio.bgm.resume();
+              }),
+              const SizedBox(height: 12),
+              _buildPauseMenuButton('Settings', Icons.settings, () {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings coming soon.')));
+              }),
+              const SizedBox(height: 12),
+              _buildPauseMenuButton('Restart', Icons.refresh, () {
+                context.pop();
+                FlameAudio.bgm.stop();
+                context.pushReplacement('${Routes.combat}?gameId=${widget.gameId}');
+              }),
+              const SizedBox(height: 12),
+              _buildPauseMenuButton('Quit', Icons.exit_to_app, () {
+                context.pop();
+                FlameAudio.bgm.stop();
+                context.go(Routes.home);
+              }, isDanger: true),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPauseMenuButton(String text, IconData icon, VoidCallback onPressed, {bool isDanger = false}) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, color: isDanger ? Colors.white : AppTheme.backgroundDark),
+      label: Text(text, style: TextStyle(color: isDanger ? Colors.white : AppTheme.backgroundDark, fontSize: 16, fontWeight: FontWeight.bold)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isDanger ? AppTheme.redFort : AppTheme.gold,
+        minimumSize: const Size(double.infinity, 50),
       ),
     );
   }
