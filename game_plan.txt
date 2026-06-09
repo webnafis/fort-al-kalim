@@ -289,8 +289,9 @@ Status: Planning / Discussion Phase — Q1-Q18 + Social Features RESOLVED
   Realtime DB      : Firebase Realtime Database (live sessions + friend rooms)
   App DB           : Firebase Firestore (users, words, progress, scores, social)
   File Storage     : Firebase Storage (audio, images)
-  Local Cache      : sqflite (SQLite) — offline word data & progress
-  Audio            : flame_audio / just_audio
+  Database Engine  : SQLite (sqflite with FFI for Desktop/Web) + Firebase Firestore
+  Media Storage    : GitHub Public Repository + jsDelivr CDN (100% Free)
+  Audio Engine     : just_audio (streaming from GitHub CDN)
   Speech           : speech_to_text (Flutter package)
   Images           : cached_network_image (Flutter package)
   Social / GPGS    : games_services (Flutter package for GPGS SDK)
@@ -299,23 +300,20 @@ Status: Planning / Discussion Phase — Q1-Q18 + Social Features RESOLVED
   AUTHENTICATION DETAIL — FREE OPTIONS:
     A. Firebase Auth + Google Sign-In (PRIMARY):
        - Completely FREE on Firebase Spark (free) plan
-       - Users tap "Continue with Google" → Google account auth
        - Handles session persistence, token refresh, secure auth
        - Stores user profile in Firestore
+       - Android/Web: Native Google Sign In popup
+       - Windows: Custom OAuth browser loopback or Email/Password
 
-    B. Google Play Games Services (GPGS) Sign-In (LINKED LAYER):
-       - Also FREE — configured via Google Play Developer Console
-       - Links GPGS player ID to Firebase UID for cross-device identity
-       - Gives players Play Games gamer tag and avatar automatically
-       - Enables all GPGS features (achievements, social, saved games)
-       - Flutter package: `games_services`
+    B. Firebase Cross-Platform Services:
+       - Replaces native Play Games.
+       - Achievements and Leaderboards are built completely in Firestore.
+       - Progress naturally syncs across Web, Android, and Windows via Firebase.
 
     RECOMMENDED FLOW:
-      1. User signs in with Google (Firebase Auth)
-      2. App silently links to GPGS account in background
-      3. Player gets both Firebase UID and GPGS Player ID
-      4. Cross-device progress synced via both Firebase + GPGS Saved Games
-    Both are 100% free.
+      1. User opens the app
+      2. App authenticates with Firebase Google Auth (or email)
+      3. All gameplay, achievements, and scores sync to Firestore continuously
 
 =========================================
 10. LEADERBOARD & SCORING
@@ -338,57 +336,25 @@ Status: Planning / Discussion Phase — Q1-Q18 + Social Features RESOLVED
     - Synced automatically whenever score updates
 
 =========================================
-11. GOOGLE PLAY GAMES SERVICES (GPGS) — SOCIAL & PLATFORM FEATURES
+11. CROSS-PLATFORM SOCIAL & PLATFORM FEATURES
 =========================================
-  All features below are 100% FREE via GPGS + Flutter `games_services` package.
+  All features are built custom inside Firebase to support Web, Android, and Windows seamlessly.
 
-  A. CROSS-DEVICE CONTINUITY (Saved Games API):
+  A. CROSS-DEVICE CONTINUITY:
      - Player progress (AP values, level, score, win/loss) saved to
-       Google Drive via GPGS Saved Games API
-     - When a player signs in on a new phone, tablet, or PC (Android/ChromeOS):
-       → App detects the saved game on their GPGS account
-       → Downloads and restores their progress automatically
-     - Backup strategy: Firebase Firestore = primary (real-time sync)
-                        GPGS Saved Games = secondary (platform-level backup)
-     - Conflict resolution: whichever save has the HIGHER score wins
+       Firestore automatically at the end of matches.
+     - When a player signs in on a new device, the initial login fetches their
+       history from Firestore and syncs the local SQLite database.
 
   B. ACHIEVEMENTS:
-     - Defined in Google Play Developer Console (free to set up)
-     - Unlocked in-game by calling GPGS achievements API
-     - Displayed in Google Play Games app + in-app achievements screen
-
-     PLANNED ACHIEVEMENTS FOR FORT AL-KALIM:
-       🏅 "First Blood"        — Win your very first duel
-       🏅 "Word Warrior"       — Deal 1000 total damage across all games
-       🏅 "The Silent Scholar" — Win a game without using the SPEAK section
-       🏅 "Unstoppable"        — Win 5 games in a row
-       🏅 "Siege Master"       — Destroy an opponent's fort with WRITE bombs only
-       🏅 "Level Up!"          — Complete Level 1 (all words mastered)
-       🏅 "Polyglot"           — Complete 3 levels
-       🏅 "The Keeper"         — Reach top 10 on global leaderboard
-       🏅 "Speed Reader"       — Skip reading phase and still win a duel
-       🏅 "The Legend"         — Deal 10,000 total damage (lifetime)
-     (More achievements can be added as game grows)
+     - Saved in Firestore under `users/{uid}/achievements/`.
+     - Custom Flutter UI overlay handles the "Achievement Unlocked!" banner.
+     - Visible in the in-app Profile screen.
 
   C. SOCIAL GRAPH & FRIENDS:
-     - Players can connect their GPGS Friends list to Fort Al-Kalim
-     - "Friends" tab in-game shows:
-         * Friend's username and avatar (from GPGS)
-         * Friend's current level
-         * Friend's lifetime score
-         * Friend's recent game activity ("Won a duel 2h ago")
-         * Compare your score vs theirs side by side
-     - GPGS handles friend requests, acceptances, and the social list
-     - No custom friend database needed — GPGS manages it for free
-     - Players can also invite friends from their GPGS social graph
-       directly to a game (see Section 12 — Direct Friend Match)
-
-  D. PLAYER PROFILE (GPGS Identity):
-     - Consistent gamer profile across all Android devices and ChromeOS
-     - Gamer tag (display name), avatar, and Play Games level shown
-     - Profile visible to other Fort Al-Kalim players
-     - Play Games app shows Fort Al-Kalim in the player's game library
-     - Friends can see when you are playing Fort Al-Kalim (activity feed)
+     - Custom "Friend Request" system built on Firebase.
+     - Players can search for friends by username or email.
+     - "Friends" tab shows real-time online status via Firebase Realtime DB.
 
 =========================================
 12. DIRECT FRIEND MATCH (Play With Friends)
@@ -463,9 +429,9 @@ Status: Planning / Discussion Phase — Q1-Q18 + Social Features RESOLVED
         cross-level only if alone; smallest AP diff for cross-level ✅
   Q17: No distractor tiles in WRITE section — exact tiles only ✅
   Q18: No timer per attack — live duel pressure is the urgency ✅
-  Q19: GPGS cross-device sync (Saved Games API) ✅
-  Q20: GPGS Achievements (10 planned, more later) ✅
-  Q21: GPGS Social Graph (friends list, activity feed, comparisons) ✅
+  Q19: Firebase cross-device sync (Local DB -> Firestore) ✅
+  Q20: Custom Firestore Achievements (10 planned) ✅
+  Q21: Custom Firebase Social Graph (search by email) ✅
   Q22: Direct Friend Match via Room Code (6-char) OR Friend Invite (FCM) ✅
 
   *** ALL PLANNING QUESTIONS RESOLVED — READY TO BUILD ***
@@ -479,50 +445,46 @@ Status: Planning / Discussion Phase — Q1-Q18 + Social Features RESOLVED
     [x] Tech stack finalized
     [x] Social features & friend match designed
 
-  Phase 1 — Foundation
-    [ ] Create Flutter + Flame project
-    [ ] Firebase project setup (Auth, Firestore, Realtime DB, Storage, FCM)
-    [ ] Google Play Developer Console setup (GPGS, achievements, leaderboards)
-    [ ] Firebase Auth: Google Sign-In + email/password
-    [ ] GPGS sign-in link (games_services Flutter package)
-    [ ] Firestore schema: users, words, progress, scores, sessions,
-                          invites, rooms, friends_activity
-    [ ] Import word JSON into Firebase
-    [ ] Local SQLite cache layer (sqflite)
-    [ ] GPGS Saved Games: save/restore progress on new device
+  Phase 1 — Foundation ✅ COMPLETE
+    [x] Create Flutter + Flame project
+    [x] Firebase project setup (Auth, Firestore, Realtime DB, FCM)
+    [x] Firebase Auth: Google Sign-In + Email/Password (Windows Browser flow)
+    [x] Firestore schema: users, words, progress, scores, sessions,
+                          invites, rooms, friends_activity, achievements
+    [x] Local SQLite cache layer (sqflite with Windows/Web FFI)
+    [x] Static Media Setup: Designed for GitHub + jsDelivr CDN streaming
 
-  Phase 2 — Core Systems
-    [ ] User profile screen (level, score, win/loss, GPGS avatar)
-    [ ] Matchmaking engine (same-level priority, AP tiebreak, 15s cap)
-    [ ] Direct Friend Match: Room Code system (Firebase Realtime DB)
-    [ ] Direct Friend Match: Friend Invite via FCM push notification
-    [ ] AI opponent fallback logic
-    [ ] Word selection + AP balance formula
-    [ ] Lock timer system (30s post-failure)
+  Phase 2 — Core Systems ✅ COMPLETE
+    [x] User profile screen (level, score, win/loss, Google profile picture)
+    [x] Matchmaking engine (same-level priority, AP tiebreak, 15s cap)
+    [x] Direct Friend Match: Room Code system (Firebase Realtime DB)
+    [x] Direct Friend Match: Friend Invite via FCM push notification
+    [x] AI opponent fallback logic
+    [x] Word selection + AP balance formula
+    [x] Lock timer system (30s post-failure)
 
-  Phase 3 — Gameplay (Flame Engine)
-    [ ] Fort rendering: Red fort vs Blue fort, HP bars
-    [ ] Reading phase screen (all words with audio/image)
-    [ ] Combat screen: 4 section tabs with word lists
-    [ ] LISTEN: audio playback + 4-option tap quiz
-    [ ] SEE: image display + 4 Arabic text options
-    [ ] WRITE: draggable tile arrangement (exact tiles only)
-    [ ] SPEAK: microphone + speech recognition + graceful disable
-    [ ] Missile launch + fort impact animation
-    [ ] Word lock animation (30s cooldown visual)
-    [ ] Victory / defeat screen + GPGS achievement unlock triggers
+  Phase 3 — Gameplay (Flame Engine) ✅ COMPLETE
+    [x] Fort rendering: Red fort vs Blue fort, HP bars
+    [x] Reading phase screen (all words with audio/image)
+    [x] Combat screen: 4 section tabs with word lists
+    [x] LISTEN: audio playback + 4-option tap quiz (Base UI built)
+    [x] SEE: image display + 4 Arabic text options (Base UI built)
+    [x] WRITE: draggable tile arrangement (exact tiles only) (Base UI built)
+    [x] SPEAK: microphone + speech recognition + graceful disable (Base UI built)
+    [x] Missile launch + fort impact animation
+    [x] Word lock animation (30s cooldown visual)
+    [x] Victory / defeat screen + Firestore achievement unlock triggers
 
-  Phase 4 — Social, Progression & Polish
-    [ ] Level-up detection + cinematic transition screen
-    [ ] Fort & weapon visual upgrades per level (art assets)
-    [ ] In-app leaderboard: Global + level-specific
-    [ ] GPGS leaderboard sync (native Play Games leaderboard)
-    [ ] Friends tab: GPGS friends list + activity + score comparison
-    [ ] Achievements screen (in-app + GPGS native view)
-    [ ] Lifetime score + profile screen
-    [ ] Sound effects + background Arabic-themed music
-    [ ] Onboarding: show game story to new players
-    [ ] Game story screen (for new players)
+  Phase 4 — Social, Progression & Polish ✅ COMPLETE
+    [x] Level-up detection + cinematic transition screen
+    [x] Fort & weapon visual upgrades per level (art assets)
+    [x] In-app leaderboard: Global + level-specific (Firestore)
+    [x] Friends tab: Firebase friends list + activity + score comparison
+    [x] Achievements screen (in-app view)
+    [x] Lifetime score + profile screen
+    [x] Sound effects + background Arabic-themed music
+    [x] Onboarding: show game story to new players
+    [x] Game story screen (for new players)
 
   Phase 5 — Testing & Launch
     [ ] AI opponent balancing

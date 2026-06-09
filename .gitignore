@@ -1,0 +1,40 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+
+# Dart
+.dart_tool/
+.pub-cache/
+.pub/
+pubspec.lock
+
+# Android
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/google-services.json
+
+# IntelliJ / Android Studio
+*.iml
+.idea/
+*.ipr
+*.iws
+.DS_Store
+
+# Firebase
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini

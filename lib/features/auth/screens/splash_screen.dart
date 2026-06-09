@@ -38,12 +38,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 2500));
     if (!mounted) return;
 
-    final user = ref.read(currentUserProvider).value;
-    if (user != null) {
-      context.go(Routes.home);
-    } else {
-      context.go(Routes.login);
-    }
+    // Story screen handles whether to go to Home or Login next
+    context.go(Routes.story);
   }
 
   @override

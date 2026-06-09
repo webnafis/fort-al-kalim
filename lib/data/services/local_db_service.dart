@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:path/path.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,6 +20,22 @@ class LocalDbService {
   }
 
   Future<Database> _initDb() async {
+    if (kIsWeb) {
+      databaseFactory = databaseFactoryFfiWeb;
+      return openDatabase(
+        'fort_al_kalim_web.db',
+        version: 1,
+        onCreate: _createTables,
+      );
+    }
+    
+    if (defaultTargetPlatform == TargetPlatform.windows || 
+        defaultTargetPlatform == TargetPlatform.linux || 
+        defaultTargetPlatform == TargetPlatform.macOS) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    }
+
     final dbPath = await getDatabasesPath();
     final path   = join(dbPath, 'fort_al_kalim.db');
 

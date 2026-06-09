@@ -1,11 +1,145 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-class MatchmakingScreen extends StatelessWidget {
+import '../../../core/theme/app_theme.dart';
+import '../../../core/router/app_router.dart';
+import '../../../data/services/auth_service.dart';
+import '../services/matchmaking_service.dart';
+
+class MatchmakingScreen extends ConsumerStatefulWidget {
   const MatchmakingScreen({super.key});
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFF0D1117),
-    appBar: AppBar(title: const Text('Find Opponent'), backgroundColor: const Color(0xFF0D1117)),
-    body: const Center(child: Text('Matchmaking — Phase 2', style: TextStyle(color: Colors.white54))),
-  );
+  ConsumerState<MatchmakingScreen> createState() => _MatchmakingScreenState();
+}
+
+class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
+  int _secondsLeft = 15;
+  Timer? _timer;
+  StreamSubscription<String>? _matchSub;
+  bool _navigating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startMatchmaking();
+  }
+
+  void _startMatchmaking() async {
+    final user = await ref.read(currentUserModelProvider.future);
+    if (user == null) {
+      if (mounted) context.go(Routes.login);
+      return;
+    }
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        if (_secondsLeft > 0) {
+          _secondsLeft--;
+        }
+      });
+    });
+
+    final service = ref.read(matchmakingServiceProvider);
+    
+    // Hardcoded 200 AP for testing, in production we would calculate this
+    // from the user's unmastered words.
+    final stream = service.findMatch(
+      uid: user.uid,
+      displayName: user.displayName,
+      level: user.currentLevel,
+      remainingAP: 200.0,
+    );
+
+    _matchSub = stream.listen((gameId) {
+      if (_navigating) return;
+      _navigating = true;
+      _timer?.cancel();
+      // Navigate to the reading phase for this game!
+      if (mounted) {
+        context.go('${Routes.readingPhase}?gameId=$gameId');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _matchSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundDark,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Searching for Opponent...',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.gold,
+                ),
+              ),
+              const SizedBox(height: 40),
+              
+              // Radar / Searching Animation Placeholder
+              Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.gold.withOpacity(0.5), width: 2),
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: AppTheme.gold,
+                    strokeWidth: 3,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // Countdown text
+              Text(
+                '0:${_secondsLeft.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w300,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Expanding search radius...',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppTheme.textSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+
+              const SizedBox(height: 60),
+              TextButton.icon(
+                onPressed: () => context.pop(),
+                icon: const Icon(Icons.close, color: AppTheme.redFort),
+                label: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppTheme.redFort, fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

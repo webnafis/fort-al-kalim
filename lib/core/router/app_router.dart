@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/splash_screen.dart';
+import '../../features/auth/screens/story_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/matchmaking/screens/matchmaking_screen.dart';
 import '../../features/matchmaking/screens/friend_room_screen.dart';
@@ -16,6 +17,7 @@ import '../../features/profile/screens/profile_screen.dart';
 // Route names as constants
 class Routes {
   static const splash       = '/';
+  static const story        = '/story';
   static const login        = '/login';
   static const home         = '/home';
   static const matchmaking  = '/matchmaking';
@@ -35,6 +37,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.splash,
         builder: (context, state) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: Routes.story,
+        builder: (context, state) => const StoryScreen(),
       ),
       GoRoute(
         path: Routes.login,

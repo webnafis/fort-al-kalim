@@ -1,7 +1,10 @@
+import 'dart:io' show Platform, HttpServer;
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../models/user_model.dart';
@@ -30,6 +33,11 @@ class AuthService {
   /// Sign in with Google account.
   Future<UserModel?> signInWithGoogle() async {
     try {
+      // Check if we are on Desktop, use custom browser flow
+      if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+         return await _signInWithGoogleDesktop();
+      }
+
       final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return null; // User cancelled
 
@@ -56,6 +64,31 @@ class AuthService {
     } catch (e) {
       throw AuthException('Google Sign-In failed: $e');
     }
+  }
+
+  /// Custom OAuth loopback flow for Desktop (Windows/Mac/Linux)
+  Future<UserModel?> _signInWithGoogleDesktop() async {
+    // 1. You will need to create a Desktop OAuth Client ID in Google Cloud Console
+    const clientId = 'YOUR_DESKTOP_CLIENT_ID.apps.googleusercontent.com';
+    const redirectUri = 'http://localhost:8080';
+    
+    final authUrl = Uri.parse(
+        'https://accounts.google.com/o/oauth2/v2/auth'
+        '?client_id=$clientId'
+        '&redirect_uri=$redirectUri'
+        '&response_type=code'
+        '&scope=email%20profile'
+    );
+
+    // 2. Launch system browser for the user to sign in
+    if (!await launchUrl(authUrl)) {
+      throw AuthException('Could not launch browser for authentication.');
+    }
+
+    // 3. Listen on localhost:8080 for the redirect from Google
+    // Note: Implementing the full token exchange requires your Client Secret.
+    // For now, this is a placeholder that demonstrates the flow you requested.
+    throw AuthException('Desktop browser redirect launched! Complete the OAuth token exchange in code to finish login.');
   }
 
   /// Sign in with email + password.
