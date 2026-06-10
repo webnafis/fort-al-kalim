@@ -4,6 +4,7 @@ import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/material.dart';
 
 import 'components/missile.dart';
+import '../../../data/services/settings_service.dart';
 
 class CombatGame extends FlameGame {
   late SpriteComponent _bg;
@@ -11,8 +12,8 @@ class CombatGame extends FlameGame {
   late SpriteComponent _enemyFort;
   
   // Expose these so Flutter UI can show HP
-  double playerHp = 200;
-  double enemyHp = 200;
+  double playerHp = 250;
+  double enemyHp = 250;
 
   @override
   Future<void> onLoad() async {
@@ -65,7 +66,7 @@ class CombatGame extends FlameGame {
       },
     );
     add(missile);
-    FlameAudio.play('launchmissile.mp3');
+    SettingsNotifier.playSfx('launchmissile.mp3');
   }
 
   /// Enemy fires at Player
@@ -84,6 +85,6 @@ class CombatGame extends FlameGame {
       },
     );
     add(missile);
-    FlameAudio.play('launchmissile.mp3');
+    SettingsNotifier.playSfx('launchmissile.mp3');
   }
 }

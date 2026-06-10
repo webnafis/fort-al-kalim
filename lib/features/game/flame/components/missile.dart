@@ -1,6 +1,9 @@
 import 'package:flame/components.dart';
 import 'package:flame_audio/flame_audio.dart';
+import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/material.dart';
+
+import '../../../../data/services/settings_service.dart';
 
 class MissileComponent extends SpriteComponent with HasGameRef {
   final Vector2 startPos;
@@ -47,7 +50,7 @@ class MissileComponent extends SpriteComponent with HasGameRef {
     
     // Check if we hit the target
     if (position.distanceTo(targetPos) < 10) {
-      FlameAudio.play('hit.mp3');
+      SettingsNotifier.playSfx('hit.mp3');
       onHit();
       removeFromParent(); // Explode / disappear
     }

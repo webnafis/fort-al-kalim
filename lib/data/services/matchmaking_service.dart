@@ -1,4 +1,3 @@
-import 'package:firebase_database/firebase_database.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:math';
@@ -13,34 +12,34 @@ final matchmakingServiceProvider = Provider<MatchmakingService>(
 
 /// Handles algorithmic matchmaking and friend room codes.
 class MatchmakingService {
-  final FirebaseDatabase  _rtdb = FirebaseDatabase.instance;
-  final FirebaseFirestore _db   = FirebaseFirestore.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // ── ALGORITHMIC MATCHMAKING ──────────────────────────────────────
 
   /// Add this player to the matchmaking queue.
   Future<void> joinQueue(UserModel player, double totalRemainingAp) async {
-    await _rtdb.ref('${AppConstants.rtdbMatchmaking}/${player.uid}').set({
+    await _db.collection('matchmaking').doc(player.uid).set({
       'uid':             player.uid,
       'displayName':     player.displayName,
       'level':           player.currentLevel,
       'totalRemainingAp':totalRemainingAp,
-      'joinedAt':        ServerValue.timestamp,
+      'joinedAt':        FieldValue.serverTimestamp(),
       'status':          'waiting',
     });
   }
 
   /// Remove this player from the queue (on cancel or match found).
   Future<void> leaveQueue(String uid) async {
-    await _rtdb.ref('${AppConstants.rtdbMatchmaking}/$uid').remove();
+    await _db.collection('matchmaking').doc(uid).delete();
   }
 
   /// Listen for a match being assigned to this player.
   Stream<String?> listenForMatch(String uid) {
-    return _rtdb
-        .ref('${AppConstants.rtdbMatchmaking}/$uid/matchedGameId')
-        .onValue
-        .map((event) => event.snapshot.value as String?);
+    return _db
+        .collection('matchmaking')
+        .doc(uid)
+        .snapshots()
+        .map((snap) => snap.data()?['matchedGameId'] as String?);
   }
 
   /// [Server-side logic placeholder]
@@ -55,13 +54,19 @@ class MatchmakingService {
   ///      Pick nearest level, then smallest AP gap
   ///   3. After 15 seconds: force-match with best available or offer AI
   Future<String?> findBestMatch(UserModel player, double myAp) async {
-    final snap = await _rtdb.ref(AppConstants.rtdbMatchmaking).get();
-    if (!snap.exists) return null;
+    final snap = await _db.collection('matchmaking').where('status', isEqualTo: 'waiting').get();
+    if (snap.docs.isEmpty) return null;
 
     final queue = <Map<String, dynamic>>[];
-    for (final child in snap.children) {
-      final data = Map<String, dynamic>.from(child.value as Map);
-      if (data['uid'] != player.uid && data['status'] == 'waiting') {
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      if (data['uid'] != player.uid) {
+        // Treat FieldValue serverTimestamp as DateTime correctly
+        if (data['joinedAt'] is Timestamp) {
+          data['joinedAt'] = (data['joinedAt'] as Timestamp).millisecondsSinceEpoch;
+        } else {
+          data['joinedAt'] = DateTime.now().millisecondsSinceEpoch; // fallback
+        }
         queue.add(data);
       }
     }
@@ -104,7 +109,7 @@ class MatchmakingService {
     final expiry  = DateTime.now()
         .add(const Duration(minutes: AppConstants.roomCodeExpiryMinutes));
 
-    await _rtdb.ref('${AppConstants.rtdbRooms}/$code').set({
+    await _db.collection('rooms').doc(code).set({
       'code':       code,
       'hostId':     host.uid,
       'hostName':   host.displayName,
@@ -112,7 +117,7 @@ class MatchmakingService {
       'guestId':    null,
       'status':     'waiting',      // waiting | ready | started
       'expiresAt':  expiry.millisecondsSinceEpoch,
-      'createdAt':  ServerValue.timestamp,
+      'createdAt':  FieldValue.serverTimestamp(),
     });
 
     return code;
@@ -120,11 +125,11 @@ class MatchmakingService {
 
   /// Join an existing room by code. Returns false if invalid/expired.
   Future<bool> joinFriendRoom(String code, UserModel guest) async {
-    final ref  = _rtdb.ref('${AppConstants.rtdbRooms}/$code');
+    final ref  = _db.collection('rooms').doc(code);
     final snap = await ref.get();
 
     if (!snap.exists) return false;
-    final data = Map<String, dynamic>.from(snap.value as Map);
+    final data = snap.data()!;
 
     // Check expiry
     final expiresAt = data['expiresAt'] as int;
@@ -143,15 +148,15 @@ class MatchmakingService {
 
   /// Stream room state (host listens for guest joining).
   Stream<Map<String, dynamic>?> listenToRoom(String code) {
-    return _rtdb.ref('${AppConstants.rtdbRooms}/$code').onValue.map((event) {
-      if (!event.snapshot.exists) return null;
-      return Map<String, dynamic>.from(event.snapshot.value as Map);
+    return _db.collection('rooms').doc(code).snapshots().map((snap) {
+      if (!snap.exists) return null;
+      return snap.data();
     });
   }
 
   /// Cancel and delete a room.
   Future<void> cancelRoom(String code) async {
-    await _rtdb.ref('${AppConstants.rtdbRooms}/$code').remove();
+    await _db.collection('rooms').doc(code).delete();
   }
 
   // ── FRIEND INVITE (FCM-based) ────────────────────────────────────

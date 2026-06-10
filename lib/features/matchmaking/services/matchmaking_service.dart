@@ -1,12 +1,12 @@
 import 'dart:async';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 final matchmakingServiceProvider = Provider((ref) => MatchmakingService());
 
 class MatchmakingService {
-  final _db = FirebaseDatabase.instance;
+  final _db = FirebaseFirestore.instance;
 
   /// Starts searching for a match. Returns a Stream of the Game ID when matched.
   Stream<String> findMatch({
@@ -18,8 +18,7 @@ class MatchmakingService {
     final controller = StreamController<String>();
     bool matched = false;
 
-    final queueRef = _db.ref('matchmaking/queue');
-    final myEntryRef = queueRef.child(uid);
+    final myEntryRef = _db.collection('matchmaking_queue').doc(uid);
 
     // 1. Enter the queue
     myEntryRef.set({
@@ -27,13 +26,13 @@ class MatchmakingService {
       'displayName': displayName,
       'level': level,
       'lifetimeScore': lifetimeScore,
-      'timestamp': ServerValue.timestamp,
+      'timestamp': FieldValue.serverTimestamp(),
     });
 
     // 2. Listen to my entry in case someone else matches with me
-    final sub = myEntryRef.onValue.listen((event) {
-      if (event.snapshot.value != null) {
-        final data = Map<String, dynamic>.from(event.snapshot.value as Map);
+    final sub = myEntryRef.snapshots().listen((snapshot) {
+      if (snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>;
         if (data.containsKey('matchedGameId')) {
           matched = true;
           controller.add(data['matchedGameId'] as String);
@@ -53,14 +52,14 @@ class MatchmakingService {
     Timer(const Duration(seconds: 15), () {
       if (!matched) {
         matched = true;
-        myEntryRef.remove(); // Leave queue
-        final aiGameId = _createAiMatch(uid, level);
+        myEntryRef.delete(); // Leave queue
+        final aiGameId = createAiMatch(uid, level);
         controller.add(aiGameId);
       }
     });
 
     controller.onCancel = () {
-      if (!matched) myEntryRef.remove();
+      if (!matched) myEntryRef.delete();
       sub.cancel();
     };
 
@@ -68,25 +67,23 @@ class MatchmakingService {
   }
 
   Future<String?> _searchForMatch(String myUid, int myLevel, double myLifetimeScore) async {
-    final queueRef = _db.ref('matchmaking/queue');
+    final queueRef = _db.collection('matchmaking_queue');
     final snapshot = await queueRef.get();
 
-    if (!snapshot.exists) return null;
+    if (snapshot.docs.isEmpty) return null;
 
-    final entries = Map<String, dynamic>.from(snapshot.value as Map);
-    
     // Filter out self and people already matched
-    final candidates = entries.entries.where((e) {
-      if (e.key == myUid) return false;
-      final data = Map<String, dynamic>.from(e.value as Map);
+    final candidates = snapshot.docs.where((doc) {
+      if (doc.id == myUid) return false;
+      final data = doc.data();
       return !data.containsKey('matchedGameId');
     }).toList();
 
     if (candidates.isEmpty) return null;
 
     // Rule 1: Same Level Exact
-    final sameLevel = candidates.where((e) {
-      final data = Map<String, dynamic>.from(e.value as Map);
+    final sameLevel = candidates.where((doc) {
+      final data = doc.data();
       return data['level'] == myLevel;
     }).toList();
 
@@ -94,8 +91,8 @@ class MatchmakingService {
 
     // Rule 2: Nearest Rank (lifetimeScore), then most waited
     sameLevel.sort((a, b) {
-      final dataA = Map<String, dynamic>.from(a.value as Map);
-      final dataB = Map<String, dynamic>.from(b.value as Map);
+      final dataA = a.data();
+      final dataB = b.data();
       
       final scoreA = (dataA['lifetimeScore'] as num).toDouble();
       final scoreB = (dataB['lifetimeScore'] as num).toDouble();
@@ -107,52 +104,58 @@ class MatchmakingService {
         return diffA.compareTo(diffB); // Nearest rank first
       } else {
         // Tie breaker: most waited (oldest timestamp first)
-        final timeA = dataA['timestamp'] as int;
-        final timeB = dataB['timestamp'] as int;
+        final timeA = (dataA['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+        final timeB = (dataB['timestamp'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
         return timeA.compareTo(timeB);
       }
     });
 
     final bestMatch = sameLevel.first;
-    final opponentUid = bestMatch.key;
+    final opponentUid = bestMatch.id;
     final gameId = const Uuid().v4();
 
     // Transactionally attempt to claim this opponent
-    final result = await queueRef.child(opponentUid).runTransaction((obj) {
-      if (obj == null) return Transaction.abort();
-      final data = Map<String, dynamic>.from(obj as Map);
-      if (data.containsKey('matchedGameId')) return Transaction.abort(); // already claimed
-      
-      data['matchedGameId'] = gameId;
-      return Transaction.success(data);
-    });
+    bool success = false;
+    try {
+      await _db.runTransaction((transaction) async {
+        final opponentDoc = await transaction.get(queueRef.doc(opponentUid));
+        if (!opponentDoc.exists) throw Exception("Opponent left queue");
+        final data = opponentDoc.data()!;
+        if (data.containsKey('matchedGameId')) throw Exception("Opponent already matched");
 
-    if (result.committed) {
+        transaction.update(queueRef.doc(opponentUid), {'matchedGameId': gameId});
+      });
+      success = true;
+    } catch (e) {
+      return null;
+    }
+
+    if (success) {
       // Claimed successfully! Create the game node.
-      await _db.ref('games/$gameId').set({
+      await _db.collection('games').doc(gameId).set({
         'player1': myUid,
         'player2': opponentUid,
         'level': myLevel,
         'status': 'reading_phase',
-        'createdAt': ServerValue.timestamp,
+        'createdAt': FieldValue.serverTimestamp(),
       });
       
       // Update my own node
-      await queueRef.child(myUid).update({'matchedGameId': gameId});
+      await queueRef.doc(myUid).update({'matchedGameId': gameId});
       return gameId;
     }
 
     return null;
   }
 
-  String _createAiMatch(String myUid, int level) {
+  String createAiMatch(String myUid, int level) {
     final gameId = 'ai_${const Uuid().v4()}';
-    _db.ref('games/$gameId').set({
+    _db.collection('games').doc(gameId).set({
       'player1': myUid,
       'player2': 'AI_BOT',
       'level': level,
       'status': 'reading_phase',
-      'createdAt': ServerValue.timestamp,
+      'createdAt': FieldValue.serverTimestamp(),
       'isAiGame': true,
     });
     return gameId;

@@ -12,7 +12,6 @@ class GameWord {
   final String? emoji;
   final String? audioUrl;
   final int usageCount;
-  final double baseDamage;
 
   GameWord({
     required this.id,
@@ -22,8 +21,27 @@ class GameWord {
     this.emoji,
     this.audioUrl,
     required this.usageCount,
-    required this.baseDamage,
   });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'englishText': englishText,
+    'arabicText': arabicText,
+    'tiles': tiles,
+    'emoji': emoji,
+    'audioUrl': audioUrl,
+    'usageCount': usageCount,
+  };
+
+  factory GameWord.fromJson(Map<String, dynamic> json) => GameWord(
+    id: json['id'] ?? '',
+    englishText: json['englishText'] ?? '',
+    arabicText: json['arabicText'] ?? '',
+    tiles: List<String>.from(json['tiles'] ?? []),
+    emoji: json['emoji'],
+    audioUrl: json['audioUrl'],
+    usageCount: json['usageCount'] ?? 0,
+  );
 }
 
 class WordSelectionService {
@@ -87,11 +105,6 @@ class WordSelectionService {
 
     if (allWords.isEmpty) return {'see': [], 'listen': [], 'write': [], 'speak': []};
 
-    // Calculate Base Damage (B) so that Fort HP exactly = 200
-    // Multipliers: See=1.0, Listen=1.25, Write=1.5, Speak=1.75. Sum = 5.5
-    // Exact 10 words per section: 10 * 5.5 = 55. 200 / 55 = 3.63
-    double baseDamage = 200.0 / (10 * 5.5);
-
     List<GameWord> pick10Words(String p1Key, String p2Key) {
       // Exclude words that have reached 4 usages for BOTH players?
       // For now, we just pick the lowest used words regardless, since if all are 4, level is mastered.
@@ -131,8 +144,8 @@ class WordSelectionService {
         }
       }
 
-      // Shuffle the 10 words
-      selected.shuffle();
+      // Sort the 10 words from least used to most used
+      selected.sort((a, b) => (a[p1Key] as int).compareTo(b[p1Key] as int));
 
       return selected.map((w) {
         // We pass the highest usage count among the two players, or just average it?
@@ -144,8 +157,7 @@ class WordSelectionService {
           tiles: w['write_tiles'],
           emoji: w['emoji'],
           audioUrl: w['audio_url'],
-          usageCount: w[p1Key], 
-          baseDamage: baseDamage,
+          usageCount: w[p1Key],
         );
       }).toList();
     }

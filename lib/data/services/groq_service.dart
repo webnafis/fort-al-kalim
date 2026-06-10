@@ -10,7 +10,7 @@ class GroqService {
   static const String _baseUrl = 'https://api.groq.com/openai/v1';
   
   /// Transcribes audio using Groq's Whisper API.
-  Future<String?> transcribeAudio(String filePath) async {
+  Future<String?> transcribeAudio(String filePath, {String? expectedWord}) async {
     try {
       final request = http.MultipartRequest(
         'POST',
@@ -22,8 +22,12 @@ class GroqService {
       });
 
       request.fields['model'] = 'whisper-large-v3';
-      // We explicitly state the language is Arabic for better transcription
       request.fields['language'] = 'ar';
+      
+      // Provide the target word as context to drastically improve Whisper's accuracy for short clips
+      if (expectedWord != null) {
+        request.fields['prompt'] = expectedWord;
+      }
       
       request.files.add(await http.MultipartFile.fromPath('file', filePath));
 
@@ -48,12 +52,13 @@ class GroqService {
   Future<bool> evaluatePronunciation(String transcript, String targetWord) async {
     try {
       final prompt = '''
-You are an Arabic language judge.
-A student tried to speak the word: "$targetWord".
-The speech-to-text engine heard: "$transcript".
-Are these two strings at least 85% similar in pronunciation, spelling, or meaning? 
-Account for slight dialect or transcription errors.
-Answer ONLY with a literal boolean "true" or "false". Do not explain.
+You are an Arabic language judge evaluating a student's pronunciation.
+Target word: "$targetWord".
+Speech-to-text heard: "$transcript".
+
+Are these two strings at least 85% similar in pronunciation, spelling, or root meaning? 
+Ignore minor differences like Arabic diacritics (tashkeel), punctuation, or common prefixes (like 'al-').
+Answer ONLY with a literal boolean "true" or "false". Do not explain or apologize.
 ''';
 
       final response = await http.post(
@@ -63,7 +68,7 @@ Answer ONLY with a literal boolean "true" or "false". Do not explain.
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'model': 'llama3-8b-8192', // Fast model for simple boolean evaluation
+          'model': 'llama-3.1-8b-instant', // Updated from decommissioned model
           'messages': [
             {'role': 'system', 'content': 'You respond only with true or false.'},
             {'role': 'user', 'content': prompt},

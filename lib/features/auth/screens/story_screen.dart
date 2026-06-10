@@ -5,11 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/settings_service.dart';
 
 class StoryScreen extends ConsumerWidget {
   const StoryScreen({super.key});
 
   void _finishStory(BuildContext context, WidgetRef ref) {
+    SettingsNotifier.playSfx('click.mp3');
     final user = ref.read(currentUserProvider).value;
     if (user != null) {
       // Already logged in -> go straight to Home

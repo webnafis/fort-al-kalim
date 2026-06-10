@@ -9,7 +9,9 @@ import 'package:flame_audio/flame_audio.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/widgets/settings_dialog.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/settings_service.dart';
 import '../services/word_selection_service.dart';
 import '../services/lock_timer_service.dart';
 import '../flame/combat_game.dart';
@@ -23,25 +25,46 @@ class CombatScreen extends ConsumerStatefulWidget {
   ConsumerState<CombatScreen> createState() => _CombatScreenState();
 }
 
-class _CombatScreenState extends ConsumerState<CombatScreen> {
+class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBindingObserver {
   late CombatGame _game;
   bool _isLoading = true;
   bool _isPaused = false;
   Map<String, List<GameWord>>? _words;
   Timer? _aiAttackTimer;
+  final Map<String, int> _matchWordUsage = {};
+
+  StreamSubscription? _missileSub;
+  StreamSubscription? _gameSub;
+  final Set<String> _processedMissiles = {};
+  String? _myUid;
+  String? _enemyUid;
+  bool _isP1 = true;
+  bool _gameOverTriggered = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _game = CombatGame();
     _loadData();
     _startBattleMusic();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      // User left the app mid-game
+      if (!_gameOverTriggered && _myUid != null) {
+        FirebaseFirestore.instance.collection('games').doc(widget.gameId).update({
+          'surrender': _myUid,
+        });
+      }
+    }
+  }
+
   Future<void> _startBattleMusic() async {
     try {
-      await FlameAudio.bgm.stop();
-      await FlameAudio.bgm.play('bgm_battle.mp3');
+      await SettingsNotifier.playBgm('bgm_battle.mp3');
     } catch (e) {
       debugPrint('Error playing battle bgm: $e');
     }
@@ -50,33 +73,101 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
   Future<void> _loadData() async {
     final user = await ref.read(currentUserModelProvider.future);
     if (user == null) return;
+    _myUid = user.uid;
 
-    // Fetch game details to know players and level
     final gameDoc = await FirebaseFirestore.instance.collection('games').doc(widget.gameId).get();
     final gameData = gameDoc.data() ?? {};
+    
     final p1 = gameData['player1'] ?? user.uid;
     final p2 = gameData['player2'] ?? 'AI_BOT';
-    final level = gameData['level'] ?? user.currentLevel;
+    _isP1 = (user.uid == p1);
+    _enemyUid = _isP1 ? p2 : p1;
 
-    final svc = ref.read(wordSelectionServiceProvider);
-    final words = await svc.selectWordsForGame(p1, p2, level);
+    Map<String, List<GameWord>> words = {};
+    if (gameData.containsKey('words')) {
+      final rawWords = gameData['words'] as Map<String, dynamic>;
+      rawWords.forEach((key, value) {
+        words[key] = (value as List).map((e) => GameWord.fromJson(e as Map<String, dynamic>)).toList();
+      });
+    } else {
+      final level = gameData['level'] ?? user.currentLevel;
+      final svc = ref.read(wordSelectionServiceProvider);
+      words = await svc.selectWordsForGame(p1, p2, level);
+    }
 
     if (mounted) {
       setState(() {
         _words = words;
         _isLoading = false;
       });
-      _startAiSimulation();
+      
+      // Listen to the main game doc for surrenders
+      _gameSub = FirebaseFirestore.instance.collection('games').doc(widget.gameId).snapshots().listen((doc) {
+        if (!mounted || _gameOverTriggered) return;
+        final data = doc.data() ?? {};
+        if (data.containsKey('surrender')) {
+          final surrenderUid = data['surrender'];
+          if (surrenderUid == _myUid) {
+            _game.playerHp = 0; // I surrendered
+          } else {
+            _game.enemyHp = 0; // Enemy surrendered
+          }
+          _checkGameOver();
+        }
+      });
+
+      if (_enemyUid == 'AI_BOT') {
+        _startAiSimulation();
+      } else {
+        _startMultiplayerListener();
+      }
     }
   }
 
+  void _startMultiplayerListener() {
+    _missileSub = FirebaseFirestore.instance
+        .collection('games')
+        .doc(widget.gameId)
+        .collection('missiles')
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted || _isPaused || _gameOverTriggered) return;
+      
+      for (var change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          final doc = change.doc;
+          if (_processedMissiles.contains(doc.id)) continue;
+          _processedMissiles.add(doc.id);
+          
+          final data = doc.data()!;
+          final from = data['from'] as String;
+          final type = data['type'] as String;
+          final damage = (data['damage'] as num).toDouble();
+          
+          if (from == _myUid) {
+            _game.fireMissileAtEnemy(type, damage, () {
+              if (mounted) setState(() {});
+              _checkGameOver();
+            });
+          } else {
+            _game.fireMissileAtPlayer(type, damage, () {
+              if (mounted) setState(() {});
+              _checkGameOver();
+            });
+          }
+        }
+      }
+    });
+  }
+
   void _startAiSimulation() {
-    // Just for demo, AI fires a missile every 3-8 seconds
     final rnd = Random();
     _aiAttackTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (!mounted || _isPaused) return;
+      if (!mounted || _isPaused || _gameOverTriggered) return;
       if (rnd.nextBool()) {
-        _game.fireMissileAtPlayer('read', 5.0, () {
+        _game.fireMissileAtPlayer('read', 15.0, () {
+          if (mounted) setState(() {});
           _checkGameOver();
         });
         setState(() {}); // refresh HP bar
@@ -86,32 +177,77 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _aiAttackTimer?.cancel();
+    _missileSub?.cancel();
+    _gameSub?.cancel();
     super.dispose();
   }
 
   void _checkGameOver() {
+    if (_gameOverTriggered) return;
     if (_game.playerHp <= 0 || _game.enemyHp <= 0) {
+      _gameOverTriggered = true;
       _aiAttackTimer?.cancel();
+      _missileSub?.cancel();
+      _gameSub?.cancel();
+      _game.pauseEngine(); // Freeze all inflight missiles so they don't detonate post-game!
       FlameAudio.bgm.stop();
-      context.go('${Routes.result}?gameId=${widget.gameId}');
+      
+      bool isVictory = _game.playerHp > 0 && _game.enemyHp <= 0;
+      context.go('${Routes.result}?gameId=${widget.gameId}&victory=$isVictory');
     }
-    setState(() {}); // force HP bar rebuild
+    if (mounted) setState(() {});
   }
 
   void _onWordAction(GameWord word, String section, bool correct) {
+    if (_gameOverTriggered) return;
     if (correct) {
-      // Fire missile!
-      _game.fireMissileAtEnemy(section, word.baseDamage, () {
-        _checkGameOver();
-      });
-      // Update usage in Firestore
+      _matchWordUsage['${word.id}_$section'] = (_matchWordUsage['${word.id}_$section'] ?? 0) + 1;
+      
+      double damage = 10.0;
+      if (section == 'see') damage = 5.0;
+      if (section == 'listen') damage = 10.0;
+      if (section == 'write') damage = 15.0;
+      if (section == 'speak') damage = 25.0;
+
+      if (_enemyUid == 'AI_BOT') {
+        _game.fireMissileAtEnemy(section, damage, () {
+          if (mounted) setState(() {});
+          _checkGameOver();
+        });
+        
+        // Also write the player's missile to Firestore so we can score it later
+        FirebaseFirestore.instance
+            .collection('games')
+            .doc(widget.gameId)
+            .collection('missiles')
+            .add({
+          'from': _myUid,
+          'type': section,
+          'damage': damage,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      } else {
+        final targetField = _isP1 ? 'player2Hp' : 'player1Hp';
+        FirebaseFirestore.instance.collection('games').doc(widget.gameId).update({
+          targetField: FieldValue.increment(-damage),
+        });
+
+        FirebaseFirestore.instance
+            .collection('games')
+            .doc(widget.gameId)
+            .collection('missiles')
+            .add({
+          'from': _myUid,
+          'type': section,
+          'damage': damage,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
+
       final user = ref.read(currentUserModelProvider).value;
       if (user != null) {
-        // Find the game level from the words map implicitly (or we could store it).
-        // For safety we'll use user.currentLevel but strictly we should use the game level.
-        // Actually, let's just fetch it from the game doc, but since it's an async operation,
-        // we can just run it in the background.
         FirebaseFirestore.instance.collection('games').doc(widget.gameId).get().then((doc) {
           final level = doc.data()?['level'] ?? user.currentLevel;
           FirebaseFirestore.instance
@@ -124,9 +260,6 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
           }, SetOptions(merge: true));
         });
       }
-    } else {
-      // Lock the word
-      ref.read(lockTimerServiceProvider).lockWord(word.id);
     }
     setState(() {});
   }
@@ -182,10 +315,10 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
                       labelColor: AppTheme.gold,
                       unselectedLabelColor: AppTheme.textMuted,
                       tabs: [
-                        Tab(text: 'SEE', icon: Icon(Icons.visibility)),
-                        Tab(text: 'LISTEN', icon: Icon(Icons.headphones)),
-                        Tab(text: 'WRITE', icon: Icon(Icons.keyboard)),
-                        Tab(text: 'SPEAK', icon: Icon(Icons.mic)),
+                        Tab(text: 'SEE (⚔️5)', icon: Icon(Icons.visibility)),
+                        Tab(text: 'LISTEN (⚔️10)', icon: Icon(Icons.headphones)),
+                        Tab(text: 'WRITE (⚔️15)', icon: Icon(Icons.keyboard)),
+                        Tab(text: 'SPEAK (⚔️25)', icon: Icon(Icons.mic)),
                       ],
                     ),
                     Expanded(
@@ -210,8 +343,13 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
 
   void _showPauseMenu() {
     setState(() => _isPaused = true);
-    _game.pauseEngine();
-    FlameAudio.bgm.pause();
+    SettingsNotifier.playSfx('click.mp3');
+
+    final isAi = _enemyUid == 'AI_BOT';
+    if (isAi) {
+      _game.pauseEngine();
+      FlameAudio.bgm.pause();
+    }
 
     showDialog(
       context: context,
@@ -219,19 +357,27 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: AppTheme.surfaceDark,
-          title: const Text('GAME PAUSED', style: TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold, textAlign: TextAlign.center)),
+          title: const Text('GAME MENU', style: TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildPauseMenuButton('Resume', Icons.play_arrow, () {
+                SettingsNotifier.playSfx('click.mp3');
                 context.pop();
                 setState(() => _isPaused = false);
-                _game.resumeEngine();
-                FlameAudio.bgm.resume();
+                if (isAi) {
+                  _game.resumeEngine();
+                  FlameAudio.bgm.resume();
+                  FlameAudio.bgm.audioPlayer?.setVolume(SettingsNotifier.currentMusicVolume);
+                }
               }),
               const SizedBox(height: 12),
-              _buildPauseMenuButton('Settings', Icons.settings, () {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings coming soon.')));
+              _buildPauseMenuButton('Settings', Icons.settings, () async {
+                context.pop();
+                await showDialog(context: context, builder: (_) => const SettingsDialog());
+                if (mounted && _isPaused) {
+                  _showPauseMenu();
+                }
               }),
               const SizedBox(height: 12),
               _buildPauseMenuButton('Restart', Icons.refresh, () {
@@ -243,7 +389,13 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
               _buildPauseMenuButton('Quit', Icons.exit_to_app, () {
                 context.pop();
                 FlameAudio.bgm.stop();
-                context.go(Routes.home);
+                _game.playerHp = 0; // Force HP to 0 so damage calc knows we lost
+                if (_myUid != null) {
+                  FirebaseFirestore.instance.collection('games').doc(widget.gameId).update({
+                    'surrender': _myUid,
+                  });
+                }
+                context.go('${Routes.result}?gameId=${widget.gameId}&didQuit=true&victory=false');
               }, isDanger: true),
             ],
           ),
@@ -268,7 +420,7 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$label ${hp.toInt()}/200', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        Text('$label ${hp.toInt()}/250', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
         Container(
           width: 120,
@@ -280,7 +432,7 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
           ),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft,
-            widthFactor: (hp / 200.0).clamp(0.0, 1.0),
+            widthFactor: (hp / 250.0).clamp(0.0, 1.0),
             child: Container(
               decoration: BoxDecoration(
                 color: color,
@@ -303,6 +455,26 @@ class _CombatScreenState extends ConsumerState<CombatScreen> {
       itemCount: words.length,
       itemBuilder: (context, index) {
         final w = words[index];
+        final usage = _matchWordUsage['${w.id}_$section'] ?? 0;
+        
+        if (usage >= 4) {
+          return Card(
+            color: AppTheme.surfaceDark.withOpacity(0.5),
+            margin: const EdgeInsets.only(bottom: 12),
+            child: const Padding(
+              padding: EdgeInsets.all(24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle, color: AppTheme.gold, size: 32),
+                  SizedBox(width: 16),
+                  Text('MASTERED\n(Max Uses Reached)', style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+            ),
+          );
+        }
+
         final isLocked = ref.watch(lockTimerServiceProvider).isLocked(w.id);
         
         final onResult = (bool correct) {

@@ -1,10 +1,14 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'firebase_options.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'data/services/settings_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,10 +32,28 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  // Set Firebase cache to 10 MB to save device storage
+  FirebaseFirestore.instance.settings = const Settings(
+    cacheSizeBytes: 10485760, // 10 MB
+  );
+
+  // Set Firebase Auth persistence to LOCAL (Best practice for persisting secure sessions)
+  try {
+    await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+  } catch (e) {
+    debugPrint("Persistence setup error (safe to ignore on some platforms): $e");
+  }
+
+  // Initialize SharedPreferences
+  final prefs = await SharedPreferences.getInstance();
+
   runApp(
     // Riverpod provider scope wraps the entire app
-    const ProviderScope(
-      child: FortAlKalimApp(),
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const FortAlKalimApp(),
     ),
   );
 }

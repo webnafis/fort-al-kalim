@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/settings_service.dart';
 import '../services/matchmaking_service.dart';
 
 class MatchmakingScreen extends ConsumerStatefulWidget {
@@ -129,7 +130,10 @@ class _MatchmakingScreenState extends ConsumerState<MatchmakingScreen> {
 
               const SizedBox(height: 60),
               TextButton.icon(
-                onPressed: () => context.pop(),
+                onPressed: () {
+                  SettingsNotifier.playSfx('click.mp3');
+                  context.pop();
+                },
                 icon: const Icon(Icons.close, color: AppTheme.redFort),
                 label: const Text(
                   'Cancel',

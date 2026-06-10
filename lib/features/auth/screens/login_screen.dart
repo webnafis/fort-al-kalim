@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../../../data/services/auth_service.dart';
+import '../../../data/services/settings_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -31,35 +32,178 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
-    setState(() { _loading = true; _errorMsg = null; });
+    SettingsNotifier.playSfx('click.mp3');
+    setState(() {
+      _loading = true;
+      _errorMsg = null;
+    });
     try {
       final user = await ref.read(authServiceProvider).signInWithGoogle();
-      if (user != null && mounted) context.go(Routes.home);
+      if (user != null && mounted) {
+        context.go(Routes.home);
+      } else {
+        setState(() => _errorMsg = 'Google Sign In failed or was cancelled.');
+      }
     } catch (e) {
-      setState(() { _errorMsg = e.toString(); });
+      setState(() => _errorMsg = e.toString());
     } finally {
-      if (mounted) setState(() { _loading = false; });
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _handleEmailAuth() async {
+    SettingsNotifier.playSfx('click.mp3');
     if (!_formKey.currentState!.validate()) return;
-    setState(() { _loading = true; _errorMsg = null; });
+    setState(() {
+      _loading = true;
+      _errorMsg = null;
+    });
+
     try {
-      final svc = ref.read(authServiceProvider);
+      final auth = ref.read(authServiceProvider);
+      final email = _emailCtrl.text.trim();
+      final pass = _passCtrl.text.trim();
+
       if (_isLogin) {
-        await svc.signInWithEmail(_emailCtrl.text.trim(), _passCtrl.text);
+        final user = await auth.signInWithEmail(email, pass);
+        if (user != null && mounted) {
+          context.go(Routes.home);
+        } else {
+          setState(() => _errorMsg = 'Invalid email or password.');
+        }
       } else {
-        await svc.registerWithEmail(
-          _emailCtrl.text.trim(), _passCtrl.text, _nameCtrl.text.trim(),
-        );
+        final user = await auth.registerWithEmail(email, pass, _nameCtrl.text.trim());
+        if (mounted) {
+          if (user == null) {
+            // Registration succeeded, email verification sent
+            setState(() {
+              _isLogin = true;
+              _errorMsg = 'Account created! Please check your email to verify your account before logging in.';
+            });
+          } else {
+            // Unlikely to happen with our new flow, but handled just in case
+            context.go(Routes.story);
+          }
+        }
       }
-      if (mounted) context.go(Routes.home);
     } catch (e) {
-      setState(() { _errorMsg = e.toString(); });
+      setState(() => _errorMsg = e.toString());
     } finally {
-      if (mounted) setState(() { _loading = false; });
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final resetEmailCtrl = TextEditingController(text: _emailCtrl.text);
+    bool isSending = false;
+    String? resetErrorMsg;
+    String? successMsg;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceDark,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: AppTheme.gold, width: 2),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.lock_reset, color: AppTheme.gold),
+                  SizedBox(width: 8),
+                  Text('Reset Password', style: TextStyle(color: AppTheme.gold, fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Enter your email address and we will send you a link to reset your password.',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: resetEmailCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Email Address',
+                      labelStyle: const TextStyle(color: AppTheme.textMuted),
+                      prefixIcon: const Icon(Icons.email_outlined, color: AppTheme.gold),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppTheme.borderColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppTheme.gold),
+                      ),
+                    ),
+                  ),
+                  if (resetErrorMsg != null) ...[
+                    const SizedBox(height: 12),
+                    Text(resetErrorMsg!, style: const TextStyle(color: AppTheme.redFort, fontSize: 12)),
+                  ],
+                  if (successMsg != null) ...[
+                    const SizedBox(height: 12),
+                    Text(successMsg!, style: const TextStyle(color: Colors.green, fontSize: 12)),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSending ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: AppTheme.textMuted)),
+                ),
+                ElevatedButton(
+                  onPressed: isSending ? null : () async {
+                    final email = resetEmailCtrl.text.trim();
+                    if (email.isEmpty || !email.contains('@')) {
+                      setDialogState(() {
+                        resetErrorMsg = 'Please enter a valid email.';
+                        successMsg = null;
+                      });
+                      return;
+                    }
+
+                    setDialogState(() {
+                      isSending = true;
+                      resetErrorMsg = null;
+                      successMsg = null;
+                    });
+
+                    try {
+                      await ref.read(authServiceProvider).sendPasswordResetEmail(email);
+                      setDialogState(() {
+                        successMsg = 'Reset link sent! Check your email.';
+                      });
+                    } catch (e) {
+                      setDialogState(() {
+                        resetErrorMsg = e.toString();
+                      });
+                    } finally {
+                      setDialogState(() {
+                        isSending = false;
+                      });
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.gold,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: isSending
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                      : const Text('Send Link'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -157,6 +301,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ],
                 ),
               ),
+              if (_isLogin)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _showForgotPasswordDialog,
+                    child: const Text('Forgot Password?', style: TextStyle(color: AppTheme.gold, fontSize: 13)),
+                  ),
+                ),
               const SizedBox(height: 8),
 
               // Error message

@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../../../data/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:record/record.dart';
+import '../../../data/services/auth_service.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -34,12 +37,25 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _checkAuth() async {
-    // Show splash for at least 2.5s
+    // Force Android microphone permission request early to prevent mid-game lag
+    try {
+      final record = AudioRecorder();
+      await record.hasPermission();
+      record.dispose();
+    } catch (e) {
+      debugPrint('Permission request error: $e');
+    }
+
+    // Show splash for at least 2.5s total
     await Future.delayed(const Duration(milliseconds: 2500));
     if (!mounted) return;
 
-    // Story screen handles whether to go to Home or Login next
-    context.go(Routes.story);
+    // Route based on cached authentication state
+    if (FirebaseAuth.instance.currentUser != null) {
+      context.go(Routes.home);
+    } else {
+      context.go(Routes.story);
+    }
   }
 
   @override

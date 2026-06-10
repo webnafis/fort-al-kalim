@@ -97,6 +97,12 @@ class AuthService {
       final credential = await _auth.signInWithEmailAndPassword(
         email: email, password: password,
       );
+      
+      if (!credential.user!.emailVerified) {
+        await _auth.signOut();
+        throw AuthException('Please check your inbox and verify your email address before logging in.');
+      }
+
       await _db.collection(AppConstants.colUsers)
                .doc(credential.user!.uid)
                .update({'lastSeen': Timestamp.now()});
@@ -114,7 +120,12 @@ class AuthService {
         email: email, password: password,
       );
       await credential.user!.updateDisplayName(displayName);
-      return await _createUserProfile(credential.user!, displayName: displayName);
+      await credential.user!.sendEmailVerification();
+      await _createUserProfile(credential.user!, displayName: displayName);
+      
+      // Sign out immediately so they must verify and log in manually
+      await _auth.signOut();
+      return null;
     } on FirebaseAuthException catch (e) {
       throw AuthException(_mapFirebaseError(e));
     }
@@ -124,6 +135,15 @@ class AuthService {
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     await _auth.signOut();
+  }
+
+  /// Send a password reset email.
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mapFirebaseError(e));
+    }
   }
 
   /// Get a user's profile from Firestore.

@@ -11,8 +11,16 @@ class UserModel {
   final double lifetimeScore;     // Total damage dealt across all games
   final int wins;
   final int losses;
+  final List<String> unlockedAchievements;
+  final int lives;
+  final int currentStreak;
+  final DateTime? lastMatchDate;
+  final DateTime? unlimitedLivesUntil;
+  final DateTime? lastLifeRefillTime;
   final DateTime createdAt;
   final DateTime lastSeen;
+
+  bool get hasUnlimitedLives => unlimitedLivesUntil != null && unlimitedLivesUntil!.isAfter(DateTime.now());
 
   const UserModel({
     required this.uid,
@@ -24,11 +32,33 @@ class UserModel {
     required this.lifetimeScore,
     required this.wins,
     required this.losses,
+    this.unlockedAchievements = const [],
+    this.lives = 5,
+    this.currentStreak = 0,
+    this.lastMatchDate,
+    this.unlimitedLivesUntil,
+    this.lastLifeRefillTime,
     required this.createdAt,
     required this.lastSeen,
   });
 
-  /// Win/loss ratio string for display.
+  /// Dynamically calculate current lives based on 30 min refill.
+  int get currentLives {
+    if (lives >= 5 || lastLifeRefillTime == null) return lives;
+    final minutesPassed = DateTime.now().difference(lastLifeRefillTime!).inMinutes;
+    final earned = minutesPassed ~/ 30;
+    return (lives + earned).clamp(0, 5);
+  }
+
+  /// Time remaining until next life refills (null if full).
+  Duration? get timeUntilNextLife {
+    if (currentLives >= 5 || lastLifeRefillTime == null) return null;
+    final minutesPassed = DateTime.now().difference(lastLifeRefillTime!).inMinutes;
+    final remainder = minutesPassed % 30;
+    return Duration(minutes: 30 - remainder);
+  }
+
+  /// Win/loss record
   String get wlRecord => '$wins W / $losses L';
 
   /// Factory from Firestore document.
@@ -44,6 +74,12 @@ class UserModel {
       lifetimeScore:  (d['lifetimeScore'] ?? 0).toDouble(),
       wins:           d['wins'] ?? 0,
       losses:         d['losses'] ?? 0,
+      unlockedAchievements: List<String>.from(d['unlockedAchievements'] ?? []),
+      lives:          d['lives'] ?? 5,
+      currentStreak:  d['currentStreak'] ?? 0,
+      lastMatchDate:  d['lastMatchDate'] != null ? (d['lastMatchDate'] as Timestamp).toDate() : null,
+      unlimitedLivesUntil: d['unlimitedLivesUntil'] != null ? (d['unlimitedLivesUntil'] as Timestamp).toDate() : null,
+      lastLifeRefillTime: d['lastLifeRefillTime'] != null ? (d['lastLifeRefillTime'] as Timestamp).toDate() : null,
       createdAt:      (d['createdAt'] as Timestamp).toDate(),
       lastSeen:       (d['lastSeen'] as Timestamp).toDate(),
     );
@@ -59,6 +95,12 @@ class UserModel {
     'lifetimeScore':lifetimeScore,
     'wins':         wins,
     'losses':       losses,
+    'unlockedAchievements': unlockedAchievements,
+    'lives':        lives,
+    'currentStreak': currentStreak,
+    'lastMatchDate': lastMatchDate != null ? Timestamp.fromDate(lastMatchDate!) : null,
+    'unlimitedLivesUntil': unlimitedLivesUntil != null ? Timestamp.fromDate(unlimitedLivesUntil!) : null,
+    'lastLifeRefillTime': lastLifeRefillTime != null ? Timestamp.fromDate(lastLifeRefillTime!) : null,
     'createdAt':    Timestamp.fromDate(createdAt),
     'lastSeen':     Timestamp.fromDate(lastSeen),
   };
@@ -71,6 +113,10 @@ class UserModel {
     double? lifetimeScore,
     int? wins,
     int? losses,
+    List<String>? unlockedAchievements,
+    int? currentStreak,
+    DateTime? lastMatchDate,
+    DateTime? unlimitedLivesUntil,
     DateTime? lastSeen,
   }) {
     return UserModel(
@@ -83,6 +129,12 @@ class UserModel {
       lifetimeScore:  lifetimeScore  ?? this.lifetimeScore,
       wins:           wins           ?? this.wins,
       losses:         losses         ?? this.losses,
+      unlockedAchievements: unlockedAchievements ?? this.unlockedAchievements,
+      lives:          lives,
+      currentStreak:  currentStreak ?? this.currentStreak,
+      lastMatchDate:  lastMatchDate ?? this.lastMatchDate,
+      unlimitedLivesUntil: unlimitedLivesUntil ?? this.unlimitedLivesUntil,
+      lastLifeRefillTime: lastLifeRefillTime,
       createdAt:      createdAt,
       lastSeen:       lastSeen       ?? this.lastSeen,
     );
