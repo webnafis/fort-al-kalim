@@ -241,6 +241,7 @@ class _ReviewWordCardState extends ConsumerState<ReviewWordCard> {
 
   Future<void> _startRecording() async {
     try {
+      await SettingsNotifier.pauseBgm();
       _record ??= AudioRecorder();
       if (await _record!.hasPermission()) {
         final dir = await getTemporaryDirectory();
@@ -250,8 +251,11 @@ class _ReviewWordCardState extends ConsumerState<ReviewWordCard> {
           path: path,
         );
         setState(() => _isRecording = true);
+      } else {
+        await SettingsNotifier.resumeBgm();
       }
     } catch (e) {
+      await SettingsNotifier.resumeBgm();
       debugPrint('Record error: $e');
     }
   }
@@ -291,6 +295,7 @@ class _ReviewWordCardState extends ConsumerState<ReviewWordCard> {
       if (mounted) {
         setState(() => _isProcessing = false);
       }
+      await SettingsNotifier.resumeBgm();
     }
   }
 
@@ -346,24 +351,38 @@ class _ReviewWordCardState extends ConsumerState<ReviewWordCard> {
               icon: const Icon(Icons.volume_up, color: AppTheme.gold),
               onPressed: () async {
                 SettingsNotifier.playSfx('click.mp3');
+                await SettingsNotifier.pauseBgm();
                 try {
                   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
                     throw Exception('Bypassing native TTS on Windows');
                   }
                   final tts = FlutterTts();
                   final settings = ref.read(settingsProvider);
+                  await tts.awaitSpeakCompletion(true);
                   await tts.setVolume(settings.sfxVolume);
                   await tts.setLanguage('ar');
                   final res = await tts.speak(widget.word.arabicText);
                   if (res == 0) throw Exception('Native TTS failed');
+                  await SettingsNotifier.resumeBgm();
                 } catch (e) {
                   try {
                     final player = AudioPlayer();
+                    
+                    player.onPlayerComplete.listen((_) {
+                      SettingsNotifier.resumeBgm();
+                    });
+                    player.onPlayerStateChanged.listen((state) {
+                      if (state == PlayerState.stopped || state == PlayerState.disposed) {
+                        SettingsNotifier.resumeBgm();
+                      }
+                    });
+                    
                     final settings = ref.read(settingsProvider);
                     await player.setVolume(settings.sfxVolume);
                     final url = 'https://translate.google.com/translate_tts?ie=UTF-8&q=${Uri.encodeComponent(widget.word.arabicText)}&tl=ar&client=tw-ob';
                     await player.play(UrlSource(url));
                   } catch (fallbackErr) {
+                    await SettingsNotifier.resumeBgm();
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('TTS Error: $fallbackErr')));
                   }
                 }

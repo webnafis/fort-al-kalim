@@ -75,12 +75,21 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
   }
 
-  /// Global helper to play BGM, remembering the track so it can restore if volume was 0
   static Future<void> playBgm(String file) async {
     currentBgmTrack = file;
     await FlameAudio.bgm.stop();
     if (currentMusicVolume > 0) {
       await FlameAudio.bgm.play(file, volume: currentMusicVolume);
+    }
+  }
+
+  static Future<void> pauseBgm() async {
+    await FlameAudio.bgm.pause();
+  }
+
+  static Future<void> resumeBgm() async {
+    if (currentMusicVolume > 0 && currentBgmTrack != null) {
+      await FlameAudio.bgm.resume();
     }
   }
 

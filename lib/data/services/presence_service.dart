@@ -1,9 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'auth_service.dart';
 
-/// Service to handle Firestore-based True Presence.
+/// Service to handle RTDB-based True Presence.
 final presenceServiceProvider = Provider<PresenceService>((ref) {
   final service = PresenceService();
   
@@ -25,15 +26,13 @@ final presenceServiceProvider = Provider<PresenceService>((ref) {
 });
 
 final onlineStatusProvider = StreamProvider.autoDispose.family<bool, String>((ref, uid) {
-  return FirebaseFirestore.instance.collection('users').doc(uid).snapshots().map((doc) {
-    if (!doc.exists) return false;
-    final data = doc.data() as Map<String, dynamic>;
-    return data['isOnline'] == true;
+  return FirebaseDatabase.instance.ref('users/$uid/isOnline').onValue.map((event) {
+    final val = event.snapshot.value;
+    return val == true;
   });
 });
 
 class PresenceService with WidgetsBindingObserver {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   String? _currentUid;
   bool _currentShareStatus = false;
 
@@ -72,13 +71,17 @@ class PresenceService with WidgetsBindingObserver {
 
   void goOnline() {
     if (_currentUid != null && _currentShareStatus) {
-      _firestore.collection('users').doc(_currentUid).set({'isOnline': true}, SetOptions(merge: true));
+      final ref = FirebaseDatabase.instance.ref('users/$_currentUid');
+      ref.onDisconnect().update({'isOnline': false});
+      ref.update({'isOnline': true});
     }
   }
 
   void goOffline() {
     if (_currentUid != null) {
-      _firestore.collection('users').doc(_currentUid).set({'isOnline': false}, SetOptions(merge: true));
+      final ref = FirebaseDatabase.instance.ref('users/$_currentUid');
+      ref.onDisconnect().cancel();
+      ref.update({'isOnline': false});
     }
   }
 

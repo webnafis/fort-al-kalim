@@ -15,7 +15,9 @@ import '../../../data/services/auth_service.dart';
 import '../../../data/services/settings_service.dart';
 import '../services/word_selection_service.dart';
 import '../services/lock_timer_service.dart';
+
 import '../flame/combat_game.dart';
+import '../services/game_presence_service.dart';
 import 'widgets/attack_cards.dart';
 
 class CombatScreen extends ConsumerStatefulWidget {
@@ -36,6 +38,7 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
 
   StreamSubscription? _missileSub;
   StreamSubscription? _gameSub;
+  StreamSubscription<String>? _presenceSub;
   final Set<String> _processedMissiles = {};
   String? _myUid;
   String? _enemyUid;
@@ -121,6 +124,14 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
         _startAiSimulation();
       } else {
         _startMultiplayerListener();
+        ref.read(gamePresenceServiceProvider).joinMatch(widget.gameId, _myUid!);
+        _presenceSub = ref.read(gamePresenceServiceProvider).watchOpponentPresence(widget.gameId, _enemyUid!).listen((status) {
+          if (!mounted || _gameOverTriggered) return;
+          if (status == 'offline') {
+            _game.enemyHp = 0; // Enemy crashed out
+            _checkGameOver();
+          }
+        });
       }
     }
   }
@@ -179,7 +190,11 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (_myUid != null && _enemyUid != 'AI_BOT') {
+      ref.read(gamePresenceServiceProvider).leaveMatch(widget.gameId, _myUid!);
+    }
     _aiAttackTimer?.cancel();
+    _presenceSub?.cancel();
     _missileSub?.cancel();
     _gameSub?.cancel();
     super.dispose();
@@ -286,7 +301,7 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
           children: [
             // TOP HALF: FLAME ENGINE
             SizedBox(
-              height: MediaQuery.of(context).size.height * 0.35,
+              height: MediaQuery.of(context).size.height * 0.45,
               child: Stack(
                 children: [
                   GameWidget(game: _game),
@@ -309,8 +324,8 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
                 ],
               ),
             ),
-            
-            // BOTTOM HALF: FLUTTER TABS
+        
+        // BOTTOM HALF: FLUTTER TABS
             Expanded(
               child: DefaultTabController(
                 length: 4,

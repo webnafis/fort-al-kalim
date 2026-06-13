@@ -124,6 +124,7 @@ class _ListenAttackCardState extends ConsumerState<ListenAttackCard> {
               icon: const Icon(Icons.play_circle_fill, color: AppTheme.gold),
               onPressed: () async {
                 SettingsNotifier.playSfx('click.mp3');
+                await SettingsNotifier.pauseBgm();
                 try {
                   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
                     throw Exception('Bypassing native TTS on Windows to force Google Translate');
@@ -131,28 +132,34 @@ class _ListenAttackCardState extends ConsumerState<ListenAttackCard> {
                   
                   final tts = FlutterTts();
                   final settings = ref.read(settingsProvider);
+                  await tts.awaitSpeakCompletion(true);
                   await tts.setVolume(settings.sfxVolume);
                   await tts.setLanguage('ar');
                   final result = await tts.speak(widget.word.arabicText);
                   if (result == 0) throw Exception('Native TTS failed');
+                  
+                  await SettingsNotifier.resumeBgm();
                 } catch (e) {
                   debugPrint('>>> TTS TRIGGER: $e');
                   try {
                     final player = AudioPlayer();
                     
+                    player.onPlayerComplete.listen((_) {
+                      SettingsNotifier.resumeBgm();
+                    });
                     player.onPlayerStateChanged.listen((state) {
-                      debugPrint('>>> AudioPlayer State Changed: $state');
+                      if (state == PlayerState.stopped || state == PlayerState.disposed) {
+                        SettingsNotifier.resumeBgm();
+                      }
                     });
                     
                     final settings = ref.read(settingsProvider);
                     await player.setVolume(settings.sfxVolume);
                     
                     final url = 'https://translate.google.com/translate_tts?ie=UTF-8&q=${Uri.encodeComponent(widget.word.arabicText)}&tl=ar&client=tw-ob';
-                    debugPrint('>>> Requesting Google Translate URL: $url');
-                    
                     await player.play(UrlSource(url));
                   } catch (fallbackErr) {
-                    debugPrint('>>> TTS FALLBACK CATCH BLOCK: $fallbackErr');
+                    await SettingsNotifier.resumeBgm();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('TTS Fallback Error: $fallbackErr')),
                     );
@@ -301,6 +308,7 @@ class _SpeakAttackCardState extends ConsumerState<SpeakAttackCard> {
 
   Future<void> _startRecording() async {
     try {
+      await SettingsNotifier.pauseBgm();
       _record ??= AudioRecorder();
       if (await _record!.hasPermission()) {
         final tempDir = await getTemporaryDirectory();
@@ -315,9 +323,11 @@ class _SpeakAttackCardState extends ConsumerState<SpeakAttackCard> {
           _statusText = 'Recording...';
         });
       } else {
+        await SettingsNotifier.resumeBgm();
         setState(() => _statusText = 'Microphone permission denied.');
       }
     } catch (e) {
+      await SettingsNotifier.resumeBgm();
       print('Record error: $e');
       setState(() => _statusText = 'Recording error.');
     }
@@ -348,27 +358,31 @@ class _SpeakAttackCardState extends ConsumerState<SpeakAttackCard> {
           final isCorrect = await groq.evaluatePronunciation(transcript, widget.word.arabicText);
           
           setState(() {
-            _statusText = 'Heard: "$transcript"\nResult: ${isCorrect ? 'Match! Excellent.' : 'Mismatched. Word Locked.'}';
             _isProcessing = false;
           });
-
+          
+          await SettingsNotifier.resumeBgm();
           widget.onResult(isCorrect);
         } else {
           setState(() {
-            _statusText = 'Transcription failed.';
             _isProcessing = false;
+            _statusText = 'Could not hear you properly. Try again.';
           });
-          widget.onResult(false);
+          await SettingsNotifier.resumeBgm();
         }
       } else {
-        setState(() => _isProcessing = false);
+        setState(() {
+          _isProcessing = false;
+          _statusText = 'Recording failed.';
+        });
+        await SettingsNotifier.resumeBgm();
       }
     } catch (e) {
-      print('Stop record error: $e');
       setState(() {
         _isProcessing = false;
-        _statusText = 'Error stopping recording.';
+        _statusText = 'Error evaluating pronunciation.';
       });
+      await SettingsNotifier.resumeBgm();
     }
   }
 
@@ -396,29 +410,43 @@ class _SpeakAttackCardState extends ConsumerState<SpeakAttackCard> {
                       icon: const Icon(Icons.volume_up, color: AppTheme.gold),
                       onPressed: () async {
                         SettingsNotifier.playSfx('click.mp3');
+                        await SettingsNotifier.pauseBgm();
                         try {
                           if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
                             throw Exception('Bypassing native TTS on Windows to force Google Translate');
                           }
+                          
                           final tts = FlutterTts();
                           final settings = ref.read(settingsProvider);
+                          await tts.awaitSpeakCompletion(true);
                           await tts.setVolume(settings.sfxVolume);
                           await tts.setLanguage('ar');
                           final result = await tts.speak(widget.word.arabicText);
                           if (result == 0) throw Exception('Native TTS failed');
+                          await SettingsNotifier.resumeBgm();
                         } catch (e) {
                           try {
                             final player = AudioPlayer();
+                            
+                            player.onPlayerComplete.listen((_) {
+                              SettingsNotifier.resumeBgm();
+                            });
+                            player.onPlayerStateChanged.listen((state) {
+                              if (state == PlayerState.stopped || state == PlayerState.disposed) {
+                                SettingsNotifier.resumeBgm();
+                              }
+                            });
+                            
                             final settings = ref.read(settingsProvider);
                             await player.setVolume(settings.sfxVolume);
+                            
                             final url = 'https://translate.google.com/translate_tts?ie=UTF-8&q=${Uri.encodeComponent(widget.word.arabicText)}&tl=ar&client=tw-ob';
                             await player.play(UrlSource(url));
                           } catch (fallbackErr) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('TTS Error: $fallbackErr')),
-                              );
-                            }
+                            await SettingsNotifier.resumeBgm();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('TTS Error: $fallbackErr')),
+                            );
                           }
                         }
                       },

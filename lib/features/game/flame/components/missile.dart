@@ -28,10 +28,10 @@ class MissileComponent extends SpriteComponent with HasGameRef {
   Future<void> onLoad() async {
     super.onLoad();
     
-    String imageName = 'missile_$type.png';
+    String imageName = 'missile_${type}_v2.png';
     // Fallback if type isn't one of the 4
     if (!['listen', 'read', 'write', 'speak'].contains(type)) {
-      imageName = 'missile_read.png'; 
+      imageName = 'missile_read_v2.png'; 
     }
     
     sprite = await gameRef.loadSprite(imageName);
