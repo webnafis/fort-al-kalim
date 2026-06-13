@@ -129,7 +129,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final levelStr = state.uri.queryParameters['level'] ?? '1';
           final type = state.uri.queryParameters['type'] ?? 'see';
-          return DictionaryPracticeScreen(level: int.parse(levelStr), practiceType: type);
+          final wordId = state.uri.queryParameters['wordId'];
+          return DictionaryPracticeScreen(level: int.parse(levelStr), practiceType: type, targetWordId: wordId);
         },
       ),
     ],

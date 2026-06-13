@@ -135,10 +135,15 @@ class _LevelDictionaryScreenState extends ConsumerState<LevelDictionaryScreen> w
         return Card(
           color: AppTheme.surfaceDark,
           margin: const EdgeInsets.only(bottom: 12),
-          child: ListTile(
-            leading: Text(w.emoji ?? '❓', style: const TextStyle(fontSize: 32)),
-            title: Text(w.arabicText, style: const TextStyle(color: AppTheme.gold, fontSize: 24, fontFamily: 'Amiri')),
-            subtitle: Text(w.englishText, style: const TextStyle(color: AppTheme.textSecondary)),
+          child: InkWell(
+            onTap: () {
+              SettingsNotifier.playSfx('click.mp3');
+              context.push('${Routes.dictionaryPractice}?level=${widget.level}&type=${sectionName.toLowerCase()}&wordId=${w.id}');
+            },
+            child: ListTile(
+              leading: Text(w.emoji ?? '❓', style: const TextStyle(fontSize: 32)),
+              title: Text(w.arabicText, style: const TextStyle(color: AppTheme.gold, fontSize: 24, fontFamily: 'Amiri')),
+              subtitle: Text(w.englishText, style: const TextStyle(color: AppTheme.textSecondary)),
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -155,8 +160,9 @@ class _LevelDictionaryScreenState extends ConsumerState<LevelDictionaryScreen> w
               ),
             ),
           ),
-        );
-      },
-    );
+        ),
+      );
+    },
+  );
   }
 }

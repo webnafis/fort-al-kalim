@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flame/game.dart';
 import 'package:go_router/go_router.dart';
@@ -184,18 +185,23 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
     super.dispose();
   }
 
-  void _checkGameOver() {
+  void _checkGameOver() async {
     if (_gameOverTriggered) return;
     if (_game.playerHp <= 0 || _game.enemyHp <= 0) {
       _gameOverTriggered = true;
-      _aiAttackTimer?.cancel();
-      _missileSub?.cancel();
-      _gameSub?.cancel();
-      _game.pauseEngine(); // Freeze all inflight missiles so they don't detonate post-game!
+      // DO NOT cancel streams here. Let dispose() do it gracefully.
+      _game.pauseEngine(); 
       FlameAudio.bgm.stop();
       
       bool isVictory = _game.playerHp > 0 && _game.enemyHp <= 0;
-      context.go('${Routes.result}?gameId=${widget.gameId}&victory=$isVictory');
+      
+      // CRITICAL WINDOWS FIX: Delay navigation so Firestore background GRPC threads
+      // can flush any pending snapshot updates before the screen is disposed and 
+      // the channels are destroyed. Prevents native C++ segfault.
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (mounted) {
+        context.go('${Routes.result}?gameId=${widget.gameId}&victory=$isVictory');
+      }
     }
     if (mounted) setState(() {});
   }
@@ -354,7 +360,7 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: AppTheme.surfaceDark,
           title: const Text('GAME MENU', style: TextStyle(color: AppTheme.gold, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
@@ -363,7 +369,7 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
             children: [
               _buildPauseMenuButton('Resume', Icons.play_arrow, () {
                 SettingsNotifier.playSfx('click.mp3');
-                context.pop();
+                dialogContext.pop();
                 setState(() => _isPaused = false);
                 if (isAi) {
                   _game.resumeEngine();
@@ -373,7 +379,7 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
               }),
               const SizedBox(height: 12),
               _buildPauseMenuButton('Settings', Icons.settings, () async {
-                context.pop();
+                dialogContext.pop();
                 await showDialog(context: context, builder: (_) => const SettingsDialog());
                 if (mounted && _isPaused) {
                   _showPauseMenu();
@@ -381,13 +387,14 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
               }),
               const SizedBox(height: 12),
               _buildPauseMenuButton('Restart', Icons.refresh, () {
-                context.pop();
-                FlameAudio.bgm.stop();
-                context.pushReplacement('${Routes.combat}?gameId=${widget.gameId}');
+                dialogContext.pop();
+                Future.delayed(const Duration(milliseconds: 100), () => FlameAudio.bgm.stop());
+                if (mounted) context.pushReplacement('${Routes.combat}?gameId=${widget.gameId}');
               }),
               const SizedBox(height: 12),
-              _buildPauseMenuButton('Quit', Icons.exit_to_app, () {
-                context.pop();
+              _buildPauseMenuButton('Quit', Icons.exit_to_app, () async {
+                dialogContext.pop();
+                _gameOverTriggered = true;
                 FlameAudio.bgm.stop();
                 _game.playerHp = 0; // Force HP to 0 so damage calc knows we lost
                 if (_myUid != null) {
@@ -395,7 +402,12 @@ class _CombatScreenState extends ConsumerState<CombatScreen> with WidgetsBinding
                     'surrender': _myUid,
                   });
                 }
-                context.go('${Routes.result}?gameId=${widget.gameId}&didQuit=true&victory=false');
+                
+                // CRITICAL WINDOWS FIX: Delay navigation after Firestore write.
+                await Future.delayed(const Duration(milliseconds: 400));
+                if (mounted) {
+                  context.go('${Routes.result}?gameId=${widget.gameId}&didQuit=true&victory=false');
+                }
               }, isDanger: true),
             ],
           ),

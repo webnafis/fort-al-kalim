@@ -31,10 +31,47 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 
   static String? currentBgmTrack;
 
+  static AudioPool? _clickPool;
+  static AudioPool? _hitPool;
+  static AudioPool? _launchPool;
+
+  /// Call this once at app startup to pre-allocate audio pools
+  static Future<void> initAudio() async {
+    try {
+      await FlameAudio.audioCache.loadAll([
+        'click.mp3',
+        'hit.mp3',
+        'launchmissile.mp3',
+      ]);
+      _clickPool = await FlameAudio.createPool('click.mp3', minPlayers: 1, maxPlayers: 15);
+      _hitPool = await FlameAudio.createPool('hit.mp3', minPlayers: 1, maxPlayers: 15);
+      _launchPool = await FlameAudio.createPool('launchmissile.mp3', minPlayers: 1, maxPlayers: 15);
+    } catch (e) {
+      // Non-fatal, just fallback
+    }
+  }
+
   /// Global helper to play sound effects respecting the SFX volume setting
   static void playSfx(String file) {
-    if (currentSfxVolume > 0) {
+    if (currentSfxVolume <= 0) return;
+
+    try {
+      if (file == 'click.mp3' && _clickPool != null) {
+        _clickPool!.start(volume: currentSfxVolume);
+        return;
+      }
+      if (file == 'hit.mp3' && _hitPool != null) {
+        _hitPool!.start(volume: currentSfxVolume);
+        return;
+      }
+      if (file == 'launchmissile.mp3' && _launchPool != null) {
+        _launchPool!.start(volume: currentSfxVolume);
+        return;
+      }
+      
       FlameAudio.play(file, volume: currentSfxVolume);
+    } catch (e) {
+      // Ignore missing files to prevent crashing
     }
   }
 

@@ -84,4 +84,44 @@ class DictionaryService {
     }
     return words;
   }
+
+  Stream<List<DictionaryWord>> streamWordsForLevel(String uid, int level) async* {
+    // 1. Fetch level words once
+    final wordsSnapshot = await _firestore
+        .collection('levels')
+        .doc('level_$level')
+        .collection('words')
+        .get();
+
+    // 2. Yield stream of progress changes
+    yield* _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('progress')
+        .doc('level_$level')
+        .snapshots()
+        .map((progressSnapshot) {
+      final progress = progressSnapshot.exists ? (progressSnapshot.data() ?? {}) : {};
+
+      List<DictionaryWord> words = [];
+      for (var doc in wordsSnapshot.docs) {
+        final d = doc.data();
+        final wordId = doc.id;
+
+        words.add(DictionaryWord(
+          id: wordId,
+          englishText: d['english_text'] ?? '',
+          arabicText: d['arabic_text'] ?? '',
+          tiles: List<String>.from(d['write_tiles'] ?? []),
+          emoji: d['emoji'],
+          audioUrl: d['audio_url'],
+          seeUsage: progress['${wordId}_see_usage'] ?? 0,
+          listenUsage: progress['${wordId}_listen_usage'] ?? 0,
+          writeUsage: progress['${wordId}_write_usage'] ?? 0,
+          speakUsage: progress['${wordId}_speak_usage'] ?? 0,
+        ));
+      }
+      return words;
+    });
+  }
 }

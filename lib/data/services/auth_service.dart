@@ -16,10 +16,21 @@ final currentUserProvider = StreamProvider<User?>((ref) {
   return FirebaseAuth.instance.authStateChanges();
 });
 
-final currentUserModelProvider = FutureProvider<UserModel?>((ref) async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return null;
-  return ref.read(authServiceProvider).getUserModel(user.uid);
+final currentUserModelProvider = StreamProvider<UserModel?>((ref) async* {
+  final user = await ref.watch(currentUserProvider.future);
+  if (user == null) {
+    yield null;
+    return;
+  }
+  
+  yield* FirebaseFirestore.instance
+      .collection(AppConstants.colUsers)
+      .doc(user.uid)
+      .snapshots()
+      .map((snapshot) {
+    if (!snapshot.exists) return null;
+    return UserModel.fromFirestore(snapshot);
+  });
 });
 
 // ── Service ───────────────────────────────────────────────────────

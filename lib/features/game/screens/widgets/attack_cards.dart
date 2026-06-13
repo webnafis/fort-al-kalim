@@ -278,9 +278,10 @@ class _WriteAttackCardState extends State<WriteAttackCard> {
 class SpeakAttackCard extends ConsumerStatefulWidget {
   final GameWord word;
   final bool isLocked;
+  final bool isPracticeMode;
   final void Function(bool) onResult;
 
-  const SpeakAttackCard({super.key, required this.word, required this.isLocked, required this.onResult});
+  const SpeakAttackCard({super.key, required this.word, required this.isLocked, this.isPracticeMode = false, required this.onResult});
 
   @override
   ConsumerState<SpeakAttackCard> createState() => _SpeakAttackCardState();
@@ -383,6 +384,48 @@ class _SpeakAttackCardState extends ConsumerState<SpeakAttackCard> {
         child: Column(
           children: [
             Text(widget.word.englishText, style: const TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
+            if (widget.isPracticeMode)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(widget.word.arabicText, style: const TextStyle(fontSize: 32, color: AppTheme.gold, fontFamily: 'Amiri')),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.volume_up, color: AppTheme.gold),
+                      onPressed: () async {
+                        SettingsNotifier.playSfx('click.mp3');
+                        try {
+                          if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+                            throw Exception('Bypassing native TTS on Windows to force Google Translate');
+                          }
+                          final tts = FlutterTts();
+                          final settings = ref.read(settingsProvider);
+                          await tts.setVolume(settings.sfxVolume);
+                          await tts.setLanguage('ar');
+                          final result = await tts.speak(widget.word.arabicText);
+                          if (result == 0) throw Exception('Native TTS failed');
+                        } catch (e) {
+                          try {
+                            final player = AudioPlayer();
+                            final settings = ref.read(settingsProvider);
+                            await player.setVolume(settings.sfxVolume);
+                            final url = 'https://translate.google.com/translate_tts?ie=UTF-8&q=${Uri.encodeComponent(widget.word.arabicText)}&tl=ar&client=tw-ob';
+                            await player.play(UrlSource(url));
+                          } catch (fallbackErr) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('TTS Error: $fallbackErr')),
+                              );
+                            }
+                          }
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 12),
             
             if (_isProcessing)

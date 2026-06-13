@@ -41,33 +41,57 @@ class SocialChallengeService {
         .snapshots();
   }
 
-  /// Accept a challenge
+  /// Accept a challenge safely with a transaction to prevent race conditions
   Future<String?> acceptChallenge(String challengeId, String myUid, String challengerUid, int myLevel) async {
-    final gameId = const Uuid().v4();
-    
-    // Create the game node
-    await _db.collection('games').doc(gameId).set({
-      'player1': challengerUid, // host
-      'player2': myUid,         // guest
-      'level': myLevel,
-      'status': 'reading_phase',
-      'isFriendMatch': true,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    final challengeRef = _db.collection('challenges').doc(challengeId);
+    String? finalGameId;
 
-    // Update challenge status
-    await _db.collection('challenges').doc(challengeId).update({
-      'status': 'accepted',
-      'gameId': gameId,
-    });
+    try {
+      await _db.runTransaction((transaction) async {
+        final snapshot = await transaction.get(challengeRef);
+        if (!snapshot.exists) throw Exception('Challenge not found');
 
-    return gameId;
+        final data = snapshot.data() as Map<String, dynamic>;
+        
+        if (data['status'] != 'pending') {
+          throw Exception('Challenge is no longer pending (status: ${data['status']})');
+        }
+
+        finalGameId = const Uuid().v4();
+        final gameRef = _db.collection('games').doc(finalGameId);
+        
+        transaction.set(gameRef, {
+          'player1': challengerUid, // host
+          'player2': myUid,         // guest
+          'level': myLevel,
+          'status': 'reading_phase',
+          'isFriendMatch': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        transaction.update(challengeRef, {
+          'status': 'accepted',
+          'gameId': finalGameId,
+        });
+      });
+      return finalGameId;
+    } catch (e) {
+      // Transaction failed or challenge wasn't pending
+      return null;
+    }
   }
 
   /// Decline a challenge
   Future<void> declineChallenge(String challengeId) async {
     await _db.collection('challenges').doc(challengeId).update({
       'status': 'declined',
+    });
+  }
+
+  /// Cancel an outgoing challenge
+  Future<void> cancelChallenge(String challengeId) async {
+    await _db.collection('challenges').doc(challengeId).update({
+      'status': 'cancelled',
     });
   }
 }

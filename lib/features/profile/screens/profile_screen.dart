@@ -12,6 +12,7 @@ import '../../../data/services/database_seeder.dart';
 import '../../matchmaking/services/friend_room_service.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/services/settings_service.dart';
+import '../../social/screens/widgets/notification_bell.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -27,6 +28,10 @@ class ProfileScreen extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        actions: const [
+          NotificationBell(),
+          SizedBox(width: 8),
+        ],
       ),
       body: userAsync.when(
         data: (user) {
@@ -55,7 +60,7 @@ class ProfileScreen extends ConsumerWidget {
                     ],
                   ),
                   child: ClipOval(
-                    child: user.photoUrl != null && user.photoUrl!.isNotEmpty
+                    child: user.photoUrl != null && user.photoUrl!.startsWith('http')
                         ? CachedNetworkImage(
                             imageUrl: user.photoUrl!,
                             fit: BoxFit.cover,
@@ -233,11 +238,18 @@ class ProfileScreen extends ConsumerWidget {
   }
 
   Widget _buildAchievementsGrid(List<String> unlockedIds) {
+    const ColorFilter greyscale = ColorFilter.matrix(<double>[
+      0.2126, 0.7152, 0.0722, 0, 0,
+      0.2126, 0.7152, 0.0722, 0, 0,
+      0.2126, 0.7152, 0.0722, 0, 0,
+      0,      0,      0,      1, 0,
+    ]);
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 120,
         crossAxisSpacing: 16,
         mainAxisSpacing: 24,
         childAspectRatio: 0.7,
@@ -246,12 +258,77 @@ class ProfileScreen extends ConsumerWidget {
       itemBuilder: (context, index) {
         final ach = kAllAchievements[index];
         final isUnlocked = unlockedIds.contains(ach.id);
-        return Column(
+        return GestureDetector(
+          onTap: () {
+            SettingsNotifier.playSfx('click.mp3');
+            _showAchievementDetails(context, ach, isUnlocked);
+          },
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isUnlocked ? AppTheme.gold.withOpacity(0.1) : AppTheme.surfaceDark.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isUnlocked ? AppTheme.gold : AppTheme.textMuted.withOpacity(0.3),
+                    width: 2,
+                  ),
+                ),
+                child: isUnlocked
+                    ? Image.asset(ach.imagePath, width: 48, height: 48)
+                    : ColorFiltered(
+                        colorFilter: greyscale,
+                        child: Opacity(
+                          opacity: 0.3,
+                          child: Image.asset(ach.imagePath, width: 48, height: 48),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                ach.title,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isUnlocked ? Colors.white : AppTheme.textMuted.withOpacity(0.5),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAchievementDetails(BuildContext context, Achievement ach, bool isUnlocked) {
+    const ColorFilter greyscale = ColorFilter.matrix(<double>[
+      0.2126, 0.7152, 0.0722, 0, 0,
+      0.2126, 0.7152, 0.0722, 0, 0,
+      0.2126, 0.7152, 0.0722, 0, 0,
+      0,      0,      0,      1, 0,
+    ]);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isUnlocked ? AppTheme.gold : AppTheme.textMuted.withOpacity(0.3), 
+            width: 2
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: isUnlocked ? AppTheme.gold.withOpacity(0.1) : AppTheme.surfaceDark.withOpacity(0.5),
+                color: isUnlocked ? AppTheme.gold.withOpacity(0.1) : AppTheme.backgroundDark,
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: isUnlocked ? AppTheme.gold : AppTheme.textMuted.withOpacity(0.3),
@@ -259,29 +336,59 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ),
               child: isUnlocked
-                  ? Image.asset(ach.imagePath, width: 48, height: 48)
+                  ? Image.asset(ach.imagePath, width: 80, height: 80)
                   : ColorFiltered(
-                      colorFilter: const ColorFilter.mode(Colors.grey, BlendMode.saturation),
+                      colorFilter: greyscale,
                       child: Opacity(
                         opacity: 0.3,
-                        child: Image.asset(ach.imagePath, width: 48, height: 48),
+                        child: Image.asset(ach.imagePath, width: 80, height: 80),
                       ),
                     ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 24),
             Text(
               ach.title,
               textAlign: TextAlign.center,
-              maxLines: 2,
               style: TextStyle(
-                fontSize: 12,
+                fontFamily: 'Amiri',
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: isUnlocked ? Colors.white : AppTheme.textMuted.withOpacity(0.5),
+                color: isUnlocked ? AppTheme.gold : AppTheme.textMuted,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              ach.description,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: isUnlocked ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                isUnlocked ? 'Unlocked!' : 'Locked',
+                style: TextStyle(
+                  color: isUnlocked ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close', style: TextStyle(color: AppTheme.gold)),
+          ),
+        ],
+      ),
     );
   }
 

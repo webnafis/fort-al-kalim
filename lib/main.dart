@@ -47,6 +47,9 @@ void main() async {
   // Initialize SharedPreferences
   final prefs = await SharedPreferences.getInstance();
 
+  // Pre-load audio pools for smooth fast-paced playback
+  await SettingsNotifier.initAudio();
+
   runApp(
     // Riverpod provider scope wraps the entire app
     ProviderScope(

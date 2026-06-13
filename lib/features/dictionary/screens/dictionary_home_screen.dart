@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/settings_service.dart';
+import '../../social/screens/widgets/notification_bell.dart';
 
 class DictionaryHomeScreen extends ConsumerWidget {
   const DictionaryHomeScreen({super.key});
@@ -20,6 +21,10 @@ class DictionaryHomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Library', style: TextStyle(fontFamily: 'Amiri', color: AppTheme.gold)),
         backgroundColor: AppTheme.backgroundDark,
+        actions: const [
+          NotificationBell(),
+          SizedBox(width: 8),
+        ],
       ),
       body: userAsync.when(
         data: (user) {
@@ -28,11 +33,11 @@ class DictionaryHomeScreen extends ConsumerWidget {
 
           return GridView.builder(
             padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 180,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio: 1.2,
+              childAspectRatio: 1.0,
             ),
             itemCount: totalLevels,
             itemBuilder: (context, index) {

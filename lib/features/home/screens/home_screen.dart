@@ -12,6 +12,7 @@ import '../../dictionary/screens/dictionary_home_screen.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/settings_service.dart';
 import '../../matchmaking/services/matchmaking_service.dart';
+import '../../social/screens/widgets/notification_bell.dart';
 
 import 'package:flame_audio/flame_audio.dart';
 
@@ -143,6 +144,11 @@ class _PlayTabState extends ConsumerState<_PlayTab> {
               if (user == null) return const SizedBox();
               return Stack(
                 children: [
+                  const Positioned(
+                    top: 16,
+                    right: 16,
+                    child: NotificationBell(),
+                  ),
                   Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,

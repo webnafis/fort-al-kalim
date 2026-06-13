@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/router/app_router.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/settings_service.dart';
+import '../../social/screens/widgets/notification_bell.dart';
 
 class LeaderboardScreen extends ConsumerWidget {
   const LeaderboardScreen({super.key});
@@ -27,6 +28,10 @@ class LeaderboardScreen extends ConsumerWidget {
               context.go(Routes.home);
             },
           ),
+          actions: const [
+            NotificationBell(),
+            SizedBox(width: 8),
+          ],
           bottom: const TabBar(
             indicatorColor: AppTheme.gold,
             labelColor: AppTheme.gold,
@@ -102,8 +107,8 @@ class _LeaderboardList extends ConsumerWidget {
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: AppTheme.backgroundDark,
-                      backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                      child: avatar == null ? const Icon(Icons.person, color: AppTheme.textMuted) : null,
+                      backgroundImage: avatar != null && avatar.startsWith('http') ? NetworkImage(avatar) : null,
+                      child: avatar == null || !avatar.startsWith('http') ? const Icon(Icons.person, color: AppTheme.textMuted) : null,
                     ),
                     title: Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     subtitle: Text('Score: $score', style: const TextStyle(color: AppTheme.gold)),

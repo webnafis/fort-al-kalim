@@ -19,6 +19,8 @@ class UserModel {
   final DateTime? lastLifeRefillTime;
   final DateTime createdAt;
   final DateTime lastSeen;
+  final bool shareOnlineStatus;
+  final bool hasPromptedForStatus;
 
   bool get hasUnlimitedLives => unlimitedLivesUntil != null && unlimitedLivesUntil!.isAfter(DateTime.now());
 
@@ -40,6 +42,8 @@ class UserModel {
     this.lastLifeRefillTime,
     required this.createdAt,
     required this.lastSeen,
+    this.shareOnlineStatus = false,
+    this.hasPromptedForStatus = false,
   });
 
   /// Dynamically calculate current lives based on 30 min refill.
@@ -82,6 +86,8 @@ class UserModel {
       lastLifeRefillTime: d['lastLifeRefillTime'] != null ? (d['lastLifeRefillTime'] as Timestamp).toDate() : null,
       createdAt:      (d['createdAt'] as Timestamp).toDate(),
       lastSeen:       (d['lastSeen'] as Timestamp).toDate(),
+      shareOnlineStatus: d['shareOnlineStatus'] ?? false,
+      hasPromptedForStatus: d['hasPromptedForStatus'] ?? false,
     );
   }
 
@@ -103,6 +109,8 @@ class UserModel {
     'lastLifeRefillTime': lastLifeRefillTime != null ? Timestamp.fromDate(lastLifeRefillTime!) : null,
     'createdAt':    Timestamp.fromDate(createdAt),
     'lastSeen':     Timestamp.fromDate(lastSeen),
+    'shareOnlineStatus': shareOnlineStatus,
+    'hasPromptedForStatus': hasPromptedForStatus,
   };
 
   UserModel copyWith({
@@ -118,6 +126,8 @@ class UserModel {
     DateTime? lastMatchDate,
     DateTime? unlimitedLivesUntil,
     DateTime? lastSeen,
+    bool? shareOnlineStatus,
+    bool? hasPromptedForStatus,
   }) {
     return UserModel(
       uid:            uid,
@@ -137,6 +147,8 @@ class UserModel {
       lastLifeRefillTime: lastLifeRefillTime,
       createdAt:      createdAt,
       lastSeen:       lastSeen       ?? this.lastSeen,
+      shareOnlineStatus: shareOnlineStatus ?? this.shareOnlineStatus,
+      hasPromptedForStatus: hasPromptedForStatus ?? this.hasPromptedForStatus,
     );
   }
 }
